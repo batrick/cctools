@@ -48,6 +48,19 @@ static const char *getroot (struct batch_queue *q)
 	return root;
 }
 
+static void addfile (struct batch_queue *q, buffer_t *B, const char *file, const char *type)
+{
+	if (file) {
+		buffer_putliteral(B, "{\"task_path\":\"./");
+		jsonA_escapestring(B, file);
+		buffer_putliteral(B, "\",\"serv_path\":\"");
+		jsonA_escapestring(B, getroot(q));
+		buffer_putliteral(B, "/");
+		jsonA_escapestring(B, file);
+		buffer_putfstring(B, "\",\"type\":\"%s\"},", type);
+	}
+}
+
 static batch_job_id_t batch_job_chirp_submit (struct batch_queue *q, const char *cmd, const char *args, const char *infile, const char *outfile, const char *errfile, const char *extra_input_files, const char *extra_output_files)
 {
 	buffer_t B;
@@ -61,32 +74,37 @@ static batch_job_id_t batch_job_chirp_submit (struct batch_queue *q, const char 
 
 	buffer_putliteral(&B, "\"executable\":\"/bin/sh\",");
 
-	buffer_putfstring(&B, "\"arguments\":[\"sh\",\"-c\",\"{\\n%s", cmd);
-	if (args)
-		buffer_putfstring(&B, " %s", args);
+	buffer_putfstring(&B, "\"arguments\":[\"sh\",\"-c\",\"{\\n");
+	jsonA_escapestring(&B, cmd);
+	if (args) {
+		buffer_putliteral(&B, " ");
+		jsonA_escapestring(&B, args);
+	}
 	buffer_putliteral(&B, "\\n}");
-	if (infile)
-		buffer_putfstring(&B, " <%s", infile);
-	if (outfile)
-		buffer_putfstring(&B, " >%s", outfile);
-	if (errfile)
-		buffer_putfstring(&B, " 2>%s", errfile);
+	if (infile) {
+		buffer_putliteral(&B, " <");
+		jsonA_escapestring(&B, infile);
+	}
+	if (outfile) {
+		buffer_putliteral(&B, " >");
+		jsonA_escapestring(&B, outfile);
+	}
+	if (errfile) {
+		buffer_putliteral(&B, " 2>");
+		jsonA_escapestring(&B, errfile);
+	}
 	buffer_putliteral(&B, "\"],");
 
 	buffer_putliteral(&B, "\"files\":[");
-	if (infile)
-		buffer_putfstring(&B, "\"{\"task_path\":\"./%s\",\"serv_path\":\"%s/%s\",\"type\":\"INPUT\"},", infile, getroot(q), infile);
-	if (outfile)
-		buffer_putfstring(&B, "\"{\"task_path\":\"./%s\",\"serv_path\":\"%s/%s\",\"type\":\"OUTPUT\"},", outfile, getroot(q), outfile);
-	if (errfile)
-		buffer_putfstring(&B, "\"{\"task_path\":\"./%s\",\"serv_path\":\"%s/%s\",\"type\":\"OUTPUT\"},", errfile, getroot(q), errfile);
+	addfile(q, &B, infile, "INPUT");
+	addfile(q, &B, outfile, "OUTPUT");
+	addfile(q, &B, errfile, "OUTPUT");
 	if (extra_input_files) {
 		char *file;
 		char *list = xxstrdup(extra_input_files);
 		while ((file = strsep(&list, ","))) {
-			if (strlen(file)) {
-				buffer_putfstring(&B, "{\"task_path\":\"%s\",\"serv_path\":\"%s/%s\",\"type\":\"INPUT\"},", file, getroot(q), file);
-			}
+			if (strlen(file))
+				addfile(q, &B, file, "INPUT");
 		}
 		free(list);
 	}
@@ -94,28 +112,27 @@ static batch_job_id_t batch_job_chirp_submit (struct batch_queue *q, const char 
 		char *file;
 		char *list = xxstrdup(extra_output_files);
 		while ((file = strsep(&list, ","))) {
-			if (strlen(file)) {
-				buffer_putfstring(&B, "{\"task_path\":\"%s\",\"serv_path\":\"%s/%s\",\"type\":\"OUTPUT\"},", file, getroot(q), file);
-			}
+			if (strlen(file))
+				addfile(q, &B, file, "OUTPUT");
 		}
 		free(list);
 	}
 	{
 		/* JSON does not allow trailing commas. */
 		size_t l;
-		const char *s = buffer_tostring(&B, &l);
+		const char *s = buffer_tolstring(&B, &l);
 		if (s[l-1] == ',')
 			buffer_rewind(&B, l-1);
 	}
 	buffer_putliteral(&B, "]}");
 
 	chirp_jobid_t id;
-	debug(D_DEBUG, "job = `%s'", buffer_tostring(&B, NULL));
-	int result = chirp_reli_job_create(gethost(q), buffer_tostring(&B, NULL), &id, STOPTIME);
+	debug(D_DEBUG, "job = `%s'", buffer_tostring(&B));
+	int result = chirp_reli_job_create(gethost(q), buffer_tostring(&B), &id, STOPTIME);
 
 	buffer_rewind(&B, 0);
 	buffer_putfstring(&B, "[%" PRICHIRP_JOBID_T "]", id);
-	if (result == 0 && (result = chirp_reli_job_commit(gethost(q), buffer_tostring(&B, NULL), STOPTIME)) == 0) {
+	if (result == 0 && (result = chirp_reli_job_commit(gethost(q), buffer_tostring(&B), STOPTIME)) == 0) {
 		itable_insert(q->job_table, id, &BATCH_JOB_CHIRP);
 		buffer_free(&B);
 		return (batch_job_id_t) id;
@@ -162,7 +179,7 @@ static batch_job_id_t batch_job_chirp_wait (struct batch_queue *q, struct batch_
 				buffer_init(&B);
 				buffer_abortonfailure(&B, 1);
 				buffer_putfstring(&B, "[%" PRICHIRP_JOBID_T "]", id);
-				reaprc = chirp_reli_job_reap(gethost(q), buffer_tostring(&B, NULL), STOPTIME);
+				reaprc = chirp_reli_job_reap(gethost(q), buffer_tostring(&B), STOPTIME);
 				buffer_free(&B);
 
 				if (reaprc == 0) {
@@ -222,11 +239,11 @@ static int batch_job_chirp_remove (struct batch_queue *q, batch_job_id_t jobid)
 
 		debug(D_BATCH, "removing job %" PRIbjid, jobid);
 
-		result = chirp_reli_job_kill(gethost(q), buffer_tostring(&B, NULL), STOPTIME);
+		result = chirp_reli_job_kill(gethost(q), buffer_tostring(&B), STOPTIME);
 		if (result == 0)
 			debug(D_BATCH, "forcibly killed job %" PRIbjid, jobid);
 
-		result = chirp_reli_job_reap(gethost(q), buffer_tostring(&B, NULL), STOPTIME);
+		result = chirp_reli_job_reap(gethost(q), buffer_tostring(&B), STOPTIME);
 		if (result == 0) {
 			debug(D_BATCH, "reaped job %" PRIbjid, jobid);
 			rc = jobid;
@@ -255,6 +272,7 @@ static void batch_queue_chirp_option_update (struct batch_queue *q, const char *
 				batch_queue_set_option(q, "root", root);
 				*root = '\0'; /* remove root */
 				batch_queue_set_option(q, "host", hostportroot);
+				chirp_reli_mkdir_recursive(gethost(q), getroot(q), S_IRWXU, STOPTIME);
 			} else {
 				batch_queue_set_option(q, "root", "/");
 				batch_queue_set_option(q, "host", hostportroot);

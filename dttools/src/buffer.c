@@ -41,7 +41,7 @@ void buffer_init(buffer_t * b)
 void buffer_ubuf(buffer_t * b, char *buf, size_t len)
 {
 	assert(b->buf == b->initial && b->buf == b->end);
-	if (buf && len >= sizeof(b->initial)) {
+	if (buf && len > sizeof(b->initial)) {
 		b->buf = b->end = b->ubuf.buf = buf;
 		b->len = b->ubuf.len = len;
 		b->end[0] = '\0'; /* initialize with empty string */
@@ -149,7 +149,49 @@ int buffer_putlstring(buffer_t * b, const char *str, size_t len)
 	return 0;
 }
 
-const char *buffer_tostring(buffer_t * b, size_t * size)
+#if 0
+int buffer_putqstring(buffer_t * b, const char *str, size_t len)
+{
+	size_t i;
+	for (i = 0; i < len; i++) {
+		if (iscntrl(str[i])) {
+			if (buffer_putfstring(b, "\\x%02X", (int)str[i]) == -1)
+				return -1;
+		} else {
+			int esc = -1;
+			switch (str[i]) {
+				case '\\': esc = '\\'; break;
+				case '\"': esc = '\"'; break;
+				case '\'': esc = '\''; break;
+				case '\a': esc = 'a'; break;
+				case '\b': esc = 'b'; break;
+				case '\f': esc = 'f'; break;
+				case '\n': esc = 'n'; break;
+				case '\r': esc = 'r'; break;
+				case '\t': esc = 't'; break;
+				case '\v': esc = 'v'; break;
+			}
+			if (esc != -1) {
+			}
+		}
+
+		if (esc == -1) {
+			if (avail(b) <= 2 && grow(b, 3) == -1)
+				return -1;
+			b->end++ = '\\';
+			b->end++ = esc;
+			b->end = '\0';
+		} else {
+			if (avail(b) <= 1 && grow(b, 2) == -1)
+				return -1;
+			b->end++ = str[i];
+			b->end = '\0';
+		}
+	}
+}
+#endif
+
+const char *buffer_tolstring(buffer_t * b, size_t * size)
 {
 	if(size != NULL)
 		*size = inuse(b);

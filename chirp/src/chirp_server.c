@@ -36,7 +36,6 @@
 #include "list.h"
 #include "load_average.h"
 #include "macros.h"
-#include "md5.h"
 #include "memory_info.h"
 #include "path.h"
 #include "stringtools.h"
@@ -76,10 +75,11 @@
 /* The maximum chunk of memory the server will allocate to handle I/O */
 #define MAX_BUFFER_SIZE (16*1024*1024)
 
-char        chirp_hostname[DOMAIN_NAME_MAX] = "";
-char        chirp_owner[USERNAME_MAX] = "";
-int         chirp_port = CHIRP_PORT;
-char        chirp_transient_path[PATH_MAX] = "."; /* local file system stuff */
+struct list *catalog_host_list;
+char         chirp_hostname[DOMAIN_NAME_MAX] = "";
+char         chirp_owner[USERNAME_MAX] = "";
+int          chirp_port = CHIRP_PORT;
+char         chirp_transient_path[PATH_MAX] = "."; /* local file system stuff */
 
 static char        address[LINK_ADDRESS_MAX];
 static time_t      advertise_alarm = 0;
@@ -88,7 +88,6 @@ static int         config_pipe[2];
 static struct      datagram *catalog_port;
 static char        hostname[DOMAIN_NAME_MAX];
 static int         idle_timeout = 60; /* one minute */
-static struct      list *catalog_host_list;
 static UINT64_T    minimum_space_free = 0;
 static UINT64_T    root_quota = 0;
 static gid_t       safe_gid = 0;
@@ -165,6 +164,8 @@ static int gc_tickets(const char *url)
 
 	chirp_acl_gctickets();
 
+	cfs->destroy();
+
 	return 0;
 }
 
@@ -217,9 +218,11 @@ static int update_all_catalogs(const char *url)
 	buffer_printf(&B, "backend %s\n", url);
 	chirp_stats_summary(&B);
 
-	list_iterate(catalog_host_list, update_one_catalog, buffer_tostring(&B, NULL));
+	list_iterate(catalog_host_list, update_one_catalog, buffer_tostring(&B));
 
 	buffer_free(&B);
+
+	cfs->destroy();
 
 	return 0;
 }
@@ -237,10 +240,12 @@ static int run_in_child_process(int (*func) (const char *a), const char *args, c
 		}
 		debug(D_PROCESS, "*** %s complete ***", name);
 		if(WIFEXITED(status)) {
+			debug(D_PROCESS, "pid %d exited with %d", pid, WEXITSTATUS(status));
 			return WEXITSTATUS(status);
-		} else {
+		} else if(WIFSIGNALED(status)) {
+			debug(D_PROCESS, "pid %d failed due to signal %d (%s)", pid, WTERMSIG(status), string_signal(WTERMSIG(status)));
 			return -1;
-		}
+		} else assert(0);
 	} else {
 		debug(D_PROCESS, "couldn't fork: %s", strerror(errno));
 		return -1;
@@ -526,6 +531,8 @@ static void chirp_handler(struct link *l, const char *addr, const char *subject)
 		char pattern[CHIRP_LINE_MAX];
 
 		chirp_jobid_t id;
+
+		char algorithm[CHIRP_LINE_MAX];
 
 		INT64_T fd, length, flags, offset, actual;
 		INT64_T uid, gid, mode;
@@ -885,13 +892,8 @@ static void chirp_handler(struct link *l, const char *addr, const char *subject)
 			}
 		} else if(sscanf(line, "thirdput %s %s %s", path, hostname, newpath) == 3) {
 			path_fix(path);
-			if(cfs == &chirp_fs_hdfs)
-				goto failure;
-
 			/* ACL check will occur inside of chirp_thirdput */
-
-			result = chirp_thirdput(subject, path, hostname, newpath, stalltime);
-
+			result = chirp_thirdput(subject, NULL, path, hostname, newpath, stalltime);
 		} else if(sscanf(line, "open %s %s %" SCNd64, path, newpath, &mode) == 3) {
 			flags = 0;
 
@@ -1527,12 +1529,28 @@ static void chirp_handler(struct link *l, const char *addr, const char *subject)
 				result = -1;
 			}
 		} else if(sscanf(line, "md5 %s", path) == 1) {
-			dataout = xxmalloc(16);
+			/* backwards compatibility */
+			unsigned char digest[CHIRP_DIGEST_MAX];
 			path_fix(path);
 			if(!chirp_acl_check(path, subject, CHIRP_ACL_READ))
 				goto failure;
-			if(cfs->md5(path, (unsigned char *) dataout) >= 0) {
-				result = dataoutlength = 16;
+			result = cfs->hash(path, "md5", digest);
+			if (result >= 0) {
+				dataout = xxmalloc(result);
+				memcpy(dataout, digest, result);
+			} else {
+				result = errno_to_chirp(errno);
+			}
+		} else if(sscanf(line, "hash %s %s", algorithm, path) == 2) {
+			unsigned char digest[CHIRP_DIGEST_MAX];
+			path_fix(path);
+			if(!chirp_acl_check(path, subject, CHIRP_ACL_READ))
+				goto failure;
+			result = cfs->hash(path, algorithm, digest);
+			if (result >= 0) {
+				dataout = xxmalloc(result);
+				dataoutlength = result;
+				memcpy(dataout, digest, result);
 			} else {
 				result = errno_to_chirp(errno);
 			}
@@ -1695,7 +1713,7 @@ static void chirp_handler(struct link *l, const char *addr, const char *subject)
 							size_t len;
 							const char *status;
 
-							status = buffer_tostring(&B, &len);
+							status = buffer_tolstring(&B, &len);
 							if (len > 0) {
 								dataout = malloc(len);
 								if (dataout) {
@@ -1736,7 +1754,7 @@ static void chirp_handler(struct link *l, const char *addr, const char *subject)
 				size_t len;
 				const char *status;
 
-				status = buffer_tostring(&B, &len);
+				status = buffer_tolstring(&B, &len);
 				if (len > 0) {
 					dataout = malloc(len);
 					if (dataout) {
@@ -1854,14 +1872,6 @@ static void chirp_receive(struct link *link, char url[CHIRP_PATH_MAX])
 			setgid(safe_gid);
 			setuid(safe_uid);
 		}
-		/* Enable only globus, hostname, and address authentication for third-party transfers. */
-		auth_clear();
-		if(auth_globus_has_delegated_credential()) {
-			auth_globus_use_delegated_credential(1);
-			auth_globus_register();
-		}
-		auth_hostname_register();
-		auth_address_register();
 
 		change_process_title("chirp_server [%s:%d] [%s]", addr, port, typesubject);
 
@@ -1875,6 +1885,8 @@ static void chirp_receive(struct link *link, char url[CHIRP_PATH_MAX])
 	}
 
 	link_close(link);
+
+	cfs->destroy();
 }
 
 void killeveryone (int sig)
@@ -1976,6 +1988,7 @@ static void show_help(const char *cmd)
 	fprintf(stdout, "\n\n");
 }
 
+#include <sys/prctl.h>
 int main(int argc, char *argv[])
 {
 	enum {
@@ -2042,12 +2055,15 @@ int main(int argc, char *argv[])
 	int did_explicit_auth = 0;
 	char port_file[PATH_MAX] = "";
 
+	/* Initialize the random seed. We don't use this for anything that needs crypto-strength PRNG. */
+	srand((unsigned int)time(NULL));
+
 	change_process_title_init(argv);
 	change_process_title("chirp_server");
 
 	catalog_host_list = list_create();
 
-	debug_config(argv[0]);
+	debug_config("chirp_server");
 
 	/* Ensure that all files are created private by default. */
 	umask(0077);
@@ -2178,7 +2194,7 @@ int main(int argc, char *argv[])
 			chirp_job_enabled = 1;
 			break;
 		case LONGOPT_JOB_CONCURRENCY:
-			chirp_job_concurrency = atoi(optarg);
+			chirp_job_concurrency = strtoul(optarg, NULL, 10);
 			break;
 		case LONGOPT_JOB_TIME_LIMIT:
 			chirp_job_time_limit = atoi(optarg);
@@ -2307,12 +2323,13 @@ int main(int argc, char *argv[])
 		change_process_title("chirp_server [scheduler]");
 		backend_setup(chirp_url);
 		rc = chirp_job_schedule();
+		cfs->destroy();
 		if(rc == 0) {
 			/* normal exit, parent probably died */
-			_exit(EXIT_SUCCESS);
+			exit(EXIT_SUCCESS);
 		} else if(rc == ENOSYS) {
 			debug(D_DEBUG, "no scheduler available, quitting!");
-			_exit(EXIT_SUCCESS);
+			exit(EXIT_SUCCESS);
 		} else {
 			fatal("schedule rc = %d: %s", rc, strerror(rc));
 		}

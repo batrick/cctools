@@ -121,7 +121,7 @@ char *make_field_names_str(char *separator)
 		if(f->active)
 			buffer_printf(&b, "%s: %s%s",  f->abbrev, f->name, separator);
 
-	char *str = xxstrdup(buffer_tostring(&b, NULL));
+	char *str = xxstrdup(buffer_tostring(&b));
 	buffer_free(&b);
 
 	return str;

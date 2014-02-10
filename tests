@@ -1,0 +1,10 @@
+(a) makespan
+(b) # of concurrent jobs WRT time
+(c) aggregate data transfer WRT time
+(d) cumulative data transferred WRT time
+(e) histogram of taskspans
+(f) bar chart for each SN with % time put/get/idle/execute
+(g) histogram box chart of data received, sent, and data processed
+
+histogram box chart of # of tasks/target TJ/source TJ
+3D plot of running tasks on SN?

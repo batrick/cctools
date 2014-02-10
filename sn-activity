@@ -1,0 +1,70 @@
+#!/bin/bash
+
+export GNUPLOT_DEFAULT_GDFONT=inconsolata
+
+job=$(realpath "$1")
+confuga=$(realpath "$2")
+
+data=$(mktemp)
+
+sqlite3 -separator $'\t' > "$data"  <<EOF
+ATTACH 'file://${job}?mode=ro' as Job;
+ATTACH 'file://${confuga}?mode=ro' as Confuga;
+
+WITH
+	TransferredBytes AS (
+		SELECT StorageNode.id, SUM(File.size) AS sent
+			FROM
+				Confuga.StorageNode
+				JOIN Confuga.TransferJob ON StorageNode.id = TransferJob.fsid
+				JOIN Confuga.File ON TransferJob.fid = File.id
+			WHERE TransferJob.state = 'COMPLETED'
+			GROUP BY StorageNode.id
+	),
+	ReceivedBytes AS (
+		SELECT StorageNode.id, SUM(File.size) AS received
+			FROM
+				Confuga.StorageNode
+				JOIN Confuga.TransferJob ON StorageNode.id = TransferJob.tsid
+				JOIN Confuga.File ON TransferJob.fid = File.id
+			WHERE TransferJob.state = 'COMPLETED'
+			GROUP BY StorageNode.id
+	),
+	ProcessedBytes AS (
+		SELECT StorageNode.id, SUM(File.size) AS processed
+			FROM
+				Confuga.StorageNode
+				JOIN Job.ConfugaJob ON StorageNode.id = ConfugaJob.sid
+				JOIN Job.ConfugaInputFile ON ConfugaJob.id = ConfugaInputFile.jid
+				JOIN Confuga.File ON ConfugaInputFile.fid = File.id
+			WHERE ConfugaJob.state = 'BOUND_OUTPUTS'
+			GROUP BY StorageNode.id
+	)
+SELECT id, TransferredBytes.sent, ReceivedBytes.received, ProcessedBytes.processed
+	FROM TransferredBytes NATURAL JOIN ReceivedBytes NATURAL JOIN ProcessedBytes
+	ORDER BY id;
+EOF
+entries=$(wc -l "$data" | cut -f1 -d' ')
+
+gnuplot <<EOF
+set terminal svg
+set output 'sn-activity.svg'
+
+set logscale y
+set key outside
+set offset graph 0.05, 0.05
+set style fill pattern
+set style histogram clustered
+set style data histograms
+set title "Data Transferred, Received, and Processed"
+set xlabel "Storage Node"
+set xtics 0,1,$((entries-1))
+set ylabel "Bytes"
+
+set size ratio 0.5
+set style fill pattern 2
+
+plot [0:] "${data}" using 2 title "Transferred", "" u 3 title "Received", "" u 4 title "Processed"
+EOF
+
+# vim: set noexpandtab tabstop=4:
