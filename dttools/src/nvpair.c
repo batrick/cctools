@@ -172,7 +172,7 @@ int nvpair_print_alloc(struct nvpair *n, char **text)
 		buffer_printf(&b, "%s %s\n", key, (char *) value);
 	}
 
-	*text  = xxstrdup(buffer_tostring(&b, &needed));
+	*text  = xxstrdup(buffer_tolstring(&b, &needed));
 
 	buffer_free(&b);
 

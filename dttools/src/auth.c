@@ -99,6 +99,7 @@ int auth_assert(struct link *link, char **type, char **subject, time_t stoptime)
 
 	if(!a) {
 		debug(D_AUTH, "ran out of authenticators");
+		errno = EACCES;
 	} else {
 		debug(D_AUTH, "lost connection");
 	}

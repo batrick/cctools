@@ -1,0 +1,64 @@
+#!/bin/bash
+
+export GNUPLOT_DEFAULT_GDFONT=inconsolata
+
+job=$(realpath "$1")
+confuga=$(realpath "$2")
+
+data=$(mktemp)
+
+# FIXME MIN/MAX aggregator for Start/Finish
+{
+	sqlite3 -separator $'\t' | awk '$1 != prev {printf "\n"; prev = $1}; {print}' > "$data"
+} <<EOF
+ATTACH 'file://${job}?mode=ro' as Job;
+ATTACH 'file://${confuga}?mode=ro' as Confuga;
+
+WITH RECURSIVE
+	Start AS (
+		SELECT Job.time_start
+			FROM Job.Job
+			ORDER BY Job.time_start
+			LIMIT 1
+	),
+	Finish AS (
+		SELECT Job.time_finish
+			FROM Job.Job
+			ORDER BY Job.time_finish DESC
+			LIMIT 1
+	),
+	cnt (x) AS (
+		SELECT * FROM start
+		UNION ALL
+		SELECT x+(SELECT (MAX(time_finish)-MIN(time_start))/100 FROM Job)
+		--SELECT x+1
+			FROM cnt
+			WHERE cnt.x < (SELECT * FROM Finish)
+	)
+SELECT x, StorageNode.id, COUNT(ConfugaJob.id)
+	FROM
+		cnt
+		--CROSS JOIN (Confuga.StorageNode LEFT OUTER JOIN (Job.ConfugaJob JOIN Job.Job ON ConfugaJob.id = Job.id) ON StorageNode.id = ConfugaJob.sid)
+		CROSS JOIN Confuga.StorageNode
+		--CROSS JOIN (Job.ConfugaJob JOIN Job.Job ON ConfugaJob.id = Job.id)
+		--LEFT OUTER JOIN (Job.ConfugaJob JOIN Job.Job ON ConfugaJob.id = Job.id) ON ConfugaJob.sid = StorageNode.id
+		LEFT OUTER JOIN (Job.ConfugaJob JOIN Job.Job ON ConfugaJob.id = Job.id) ON ConfugaJob.sid = StorageNode.id AND Job.time_start <= x AND x <= Job.time_finish
+	--WHERE Job.time_start <= x AND x <= Job.time_finish
+	GROUP BY x, StorageNode.id;
+EOF
+echo "$data"
+#entries=$(wc -l "$data" | cut -f1 -d' ')
+#tasks="${entries}"
+
+gnuplot <<EOF
+set terminal svg
+set output 'workspan.svg'
+set pm3d map
+
+set title "Job Heat-Map"
+set xlabel "Time (seconds)"
+set ylabel "Storage Node"
+splot "$data" u 1:2:3
+EOF
+
+# vim: set noexpandtab tabstop=4:

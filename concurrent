@@ -1,0 +1,36 @@
+#!/bin/bash
+
+export GNUPLOT_DEFAULT_GDFONT=inconsolata
+
+job=$(realpath "$1")
+confuga=$(realpath "$2")
+
+data=$(mktemp)
+
+sqlite3 -separator $'\t' > "$data"  <<EOF
+ATTACH 'file://${job}?mode=ro' as Job;
+ATTACH 'file://${confuga}?mode=ro' as Confuga;
+
+SELECT Job.id, Job.time_start, 1
+	FROM Job.Job
+UNION ALL
+SELECT Job.id, Job.time_finish, -1
+	FROM Job.Job;
+EOF
+
+gnuplot <<EOF
+set terminal svg
+set output 'concurrent.svg'
+
+set xdata time
+set timefmt "%s"
+set format x "%H:%M"
+set xlabel "time (minutes)"
+
+set ylabel "concurrent jobs"
+set mytics
+
+plot [][0:] "${data}" using 2:3 title "Concurrent Jobs" smooth cumulative
+EOF
+
+# vim: set noexpandtab tabstop=4:

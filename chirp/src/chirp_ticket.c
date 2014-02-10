@@ -77,7 +77,7 @@ char *chirp_ticket_tostring(struct chirp_ticket *ct)
 		buffer_printf(&B, "rights \"%s\" \"%s\"\n", ct->rights[n].directory, ct->rights[n].acl);
 	}
 
-	s = buffer_tostring(&B, &n);
+	s = buffer_tolstring(&B, &n);
 	result = xxmalloc(n + 1);
 	memset(result, 0, n + 1);
 	memcpy(result, s, n);
