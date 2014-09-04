@@ -686,7 +686,9 @@ static int replicate_push_asynchronous (confuga *C, chirp_jobid_t id)
 		"			JOIN StorageNodeTransferCount ON ConfugaJob.sid = StorageNodeTransferCount.sid"
 		"			JOIN NeededFiles ON ConfugaJob.id = NeededFiles.id"
 		"			JOIN RandomSourceStorageNode ON NeededFiles.fid = RandomSourceStorageNode.fid"
+		"			JOIN FileReplicas ON NeededFiles.fid = FileReplicas.fid"
 		"		WHERE ConfugaJob.id = ?1 AND (?2 == 0 OR StorageNodeTransferCount._count < ?2)"
+		"		ORDER BY FileReplicas.size DESC"
 		"		LIMIT 1;"
 		"END TRANSACTION;";
 
