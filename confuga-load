@@ -44,8 +44,8 @@ runbg () {
 sleep 5
 
 for concurrency in 20 16 12 08 04 02 01; do
-	for scheduler in fifo-1 fifo-2 fifo-4; do
-		for replication in push-sync-1 push-async-2 push-async-4; do
+	for scheduler in fifo-4 fifo-2 fifo-1; do
+		for replication in push-async-4 push-async-2 push-sync-1; do
 			if [ "$replication" = 'push-sync-1' -a ! \( "$scheduler" = 'fifo-1' \) ]; then
 				continue;
 			fi
