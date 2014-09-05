@@ -59,6 +59,7 @@ static int db_init (confuga *C)
 {
 	static const char Initialize[] =
 		"PRAGMA foreign_keys = ON;"
+		"PRAGMA journal_mode = MEMORY;"
 		"BEGIN TRANSACTION;"
 		"CREATE TABLE Confuga.File ("
 		"	id BLOB PRIMARY KEY," /* SHA1 binary hash */
