@@ -614,7 +614,6 @@ out:
 
 static int replicate_push_asynchronous (confuga *C, chirp_jobid_t id)
 {
-	/* FIXME for testing, only one "scheduled" job at any time? NO: allow rescheduling a job... factor in PotentialReplicas on both SN and then allow movement? Kill current jobs? */
 	static const char SQL[] =
 		/* TODO transfer attempts, reschedule on threshold */
 		"BEGIN TRANSACTION;"
