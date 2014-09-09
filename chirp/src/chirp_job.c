@@ -68,7 +68,7 @@ static int db_init (sqlite3 *db)
 	static const char Initialize[] =
 		/* Always goes through... */
 		"PRAGMA foreign_keys = ON;"
-		"PRAGMA journal_mode = MEMORY;"
+		"PRAGMA journal_mode = WAL;"
 		/* May cause errors (table already exists because the DB is already setup) */
 		"BEGIN TRANSACTION;"
 		"CREATE TABLE Job("
