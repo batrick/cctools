@@ -66,7 +66,7 @@ CONFUGA_API int confuga_job_dbinit (confuga *C, sqlite3 *db)
 		//"	sid INTEGER NOT NULL,"
 		//"	time_scheduled DATETIME NOT NULL,"
 		//"	PRIMARY KEY (id, sid));"
-		"CREATE TABLE ConfugaJobState (state TEXT PRIMARY KEY, running INTEGER NOT NULL);"
+		"CREATE TABLE ConfugaJobState (state TEXT PRIMARY KEY, allocated INTEGER NOT NULL, executing INTEGER NOT NULL);"
 		"INSERT INTO ConfugaJobState (state, allocated, executing) VALUES"
 		"	('NEW', 0, 0),"
 		"	('BOUND_INPUTS', 0, 0),"
