@@ -7,14 +7,14 @@ import subprocess
 from weaver.stack import WeaverNests
 from weaver.util import Stash
 
-UNIQUE_SMALL_FILES = 50
-SHARED_LARGE_FILES = 2
-TASKS = 50
+UNIQUE_SMALL_FILES = 16
+SHARED_LARGE_FILES = 0
+TASKS = 16
 
 def sfs():
-    return random.SystemRandom().randint(1024, 65536)
+    return 1*2**30
 def lfs():
-    return 8*2**30
+    return 1*2**30
 
 consumer = ShellFunction('''
     /bin/cat "$@" > /dev/null
