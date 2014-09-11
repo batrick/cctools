@@ -149,39 +149,6 @@ static int db_init (confuga *C)
 		"	SELECT *"
 		"		FROM TransferJob"
 		"		WHERE TransferJob.state != 'ERRORED' AND TransferJob.state != 'COMPLETED';"
-		"INSERT INTO Confuga.StorageNode (hostport, root)"
-		"	VALUES"
-		"		('disc01.crc.nd.edu:9122', '/batrick/.confuga/'),"
-		"		('disc02.crc.nd.edu:9122', '/batrick/.confuga/'),"
-		"		('disc03.crc.nd.edu:9122', '/batrick/.confuga/'),"
-		"		('disc04.crc.nd.edu:9122', '/batrick/.confuga/'),"
-		"		('disc05.crc.nd.edu:9122', '/batrick/.confuga/'),"
-		"		('disc06.crc.nd.edu:9122', '/batrick/.confuga/'),"
-		"		('disc07.crc.nd.edu:9122', '/batrick/.confuga/'),"
-		"		('disc08.crc.nd.edu:9122', '/batrick/.confuga/'),"
-		"		('disc09.crc.nd.edu:9122', '/batrick/.confuga/'),"
-		"		('disc10.crc.nd.edu:9122', '/batrick/.confuga/'),"
-		"		('disc11.crc.nd.edu:9122', '/batrick/.confuga/'),"
-		"		('disc12.crc.nd.edu:9122', '/batrick/.confuga/'),"
-		"		('disc13.crc.nd.edu:9122', '/batrick/.confuga/'),"
-		"		('disc14.crc.nd.edu:9122', '/batrick/.confuga/'),"
-		"		('disc15.crc.nd.edu:9122', '/batrick/.confuga/'),"
-		"		('disc16.crc.nd.edu:9122', '/batrick/.confuga/'),"
-		"		('disc17.crc.nd.edu:9122', '/batrick/.confuga/'),"
-		"		('disc18.crc.nd.edu:9122', '/batrick/.confuga/'),"
-		"		('disc19.crc.nd.edu:9122', '/batrick/.confuga/'),"
-		"		('disc20.crc.nd.edu:9122', '/batrick/.confuga/'),"
-		"		('disc21.crc.nd.edu:9122', '/batrick/.confuga/'),"
-		"		('disc22.crc.nd.edu:9122', '/batrick/.confuga/'),"
-		"		('disc23.crc.nd.edu:9122', '/batrick/.confuga/'),"
-		"		('disc24.crc.nd.edu:9122', '/batrick/.confuga/'),"
-		"		('disc25.crc.nd.edu:9122', '/batrick/.confuga/'),"
-		"		('disc26.crc.nd.edu:9122', '/batrick/.confuga/'),"
-		"		('localhost:10000', '/batrick/.confuga/'),"
-		"		('localhost:10001', '/batrick/.confuga/'),"
-		"		('localhost:10002', '/batrick/.confuga/'),"
-		"		('localhost:10003', '/batrick/.confuga/'),"
-		"		('localhost:10004', '/batrick/.confuga/');"
 		"END TRANSACTION;";
 
 	int rc;
@@ -316,6 +283,7 @@ static int parse_uri (confuga *C, const char *uri)
 	char *options = NULL;
 	char *option = NULL;
 	char *value = NULL;
+	char *subvalue = NULL;
 
 	if (pattern_match(uri, "(.-)%?(.*)", &root, &options) >= 0) {
 		const char *rest = options;
@@ -324,29 +292,21 @@ static int parse_uri (confuga *C, const char *uri)
 
 		while (pattern_match(rest, "(%w+)=([^&]*)&?()", &option, &value, &n) >= 0) {
 			if (strcmp(option, "concurrency") == 0) {
-				char *end;
-				unsigned long v;
-				errno = 0;
-				v = strtoul(value, &end, 10);
-				if (v == ULONG_MAX && errno)
-					CATCH(ERANGE);
-				if (value == end)
-					CATCH(EINVAL);
-				confuga_concurrency(C, v);
+				if (pattern_match(value, "^(%d+)$", &subvalue) >= 0)
+					CATCH(confuga_concurrency(C, strtoul(subvalue, NULL, 10)));
+				else CATCH(EINVAL);
 			} else if (strcmp(option, "scheduler") == 0) {
-				char *count = NULL;
-				if (pattern_match(value, "^fifo%-?(%d*)$", &count) >= 0) {
-					confuga_scheduler_strategy(C, CONFUGA_SCHEDULER_FIFO, strtoul(count, NULL, 10));
+				if (pattern_match(value, "^fifo%-?(%d*)$", &subvalue) >= 0) {
+					CATCH(confuga_scheduler_strategy(C, CONFUGA_SCHEDULER_FIFO, strtoul(subvalue, NULL, 10)));
 				} else CATCH(EINVAL);
-				free(count);
 			} else if (strcmp(option, "replication") == 0) {
-				char *count = NULL;
-				if (pattern_match(value, "^push%-sync%-?(%d*)$", &count) >= 0) {
-					confuga_replication_strategy(C, CONFUGA_REPLICATION_PUSH_SYNCHRONOUS, strtoul(count, NULL, 10));
-				} else if (pattern_match(value, "^push%-async%-?(%d*)$", &count) >= 0) {
-					confuga_replication_strategy(C, CONFUGA_REPLICATION_PUSH_ASYNCHRONOUS, strtoul(count, NULL, 10));
+				if (pattern_match(value, "^push%-sync%-?(%d*)$", &subvalue) >= 0) {
+					CATCH(confuga_replication_strategy(C, CONFUGA_REPLICATION_PUSH_SYNCHRONOUS, strtoul(subvalue, NULL, 10)));
+				} else if (pattern_match(value, "^push%-async%-?(%d*)$", &subvalue) >= 0) {
+					CATCH(confuga_replication_strategy(C, CONFUGA_REPLICATION_PUSH_ASYNCHRONOUS, strtoul(subvalue, NULL, 10)));
 				} else CATCH(EINVAL);
-				free(count);
+			} else if (strcmp(option, "nodes") == 0) {
+				CATCH(confuga_nodes(C, subvalue));
 			} else {
 				debug(D_NOTICE|D_CONFUGA, "unknown URI option `%s'", option);
 				CATCH(EINVAL);
@@ -354,6 +314,7 @@ static int parse_uri (confuga *C, const char *uri)
 			rest += n-1;
 			option = realloc(option, 0);
 			value = realloc(value, 0);
+			subvalue = realloc(subvalue, 0);
 		}
 		if (strlen(rest)) {
 			debug(D_NOTICE|D_CONFUGA, "unparseable URI at `%s'", rest);
@@ -370,6 +331,7 @@ out:
 	free(options);
 	free(option);
 	free(value);
+	free(subvalue);
 	return rc;
 }
 
@@ -408,6 +370,43 @@ CONFUGA_API int confuga_connect (confuga **Cp, const char *root, const char *cat
 out:
 	if (rc)
 		free(C);
+	return rc;
+}
+
+CONFUGA_API int confuga_nodes (confuga *C, const char *nodes)
+{
+	int rc;
+	FILE *file = NULL;
+	char *node = NULL;
+	const char *rest;
+	char *hostname = NULL;
+	char *root = NULL;
+	size_t n;
+
+	if (pattern_match(nodes, "^node:(.*)", &node) >= 0) {
+		/* do nothing */
+	} else if (pattern_match(nodes, "^file:(.*)", &node) >= 0) {
+		file = fopen(node, "r");
+		CATCHUNIX(file ? 0 : -1);
+		CATCHUNIX(copy_stream_to_buffer(file, &node));
+	} else CATCH(EINVAL);
+
+	rest = node;
+	while (pattern_match(rest, "chirp://([^/,%s]+)([^,%s]*)", &hostname, &root, &n) >= 0) {
+		CATCH(confugaS_node_insert(C, hostname, root));
+		rest += n;
+		hostname = realloc(hostname, 0);
+		root = realloc(hostname, 0);
+	}
+
+	rc = 0;
+	goto out;
+out:
+	if (file)
+		fclose(file);
+	free(node);
+	free(hostname);
+	free(root);
 	return rc;
 }
 

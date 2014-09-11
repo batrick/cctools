@@ -109,6 +109,8 @@ CONFUGA_API int confuga_daemon(confuga *C);
 
 CONFUGA_API int confuga_concurrency (confuga *C, uint64_t n);
 
+CONFUGA_API int confuga_nodes (confuga *C, const char *nodes);
+
 #define CONFUGA_SCHEDULER_FIFO 1
 CONFUGA_API int confuga_scheduler_strategy (confuga *C, int strategy, uint64_t n);
 

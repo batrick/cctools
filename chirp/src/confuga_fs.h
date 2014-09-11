@@ -47,6 +47,7 @@ CONFUGA_IAPI int confugaR_manager (confuga *C);
 CONFUGA_IAPI int confugaS_catalog (confuga *C, const char *catalog);
 CONFUGA_IAPI int confugaS_catalog_sync (confuga *C);
 CONFUGA_IAPI int confugaS_setup (confuga *C);
+CONFUGA_IAPI int confugaS_node_insert (confuga *C, const char *hostport, const char *root);
 
 CONFUGA_IAPI int confugaJ_schedule (confuga *C);
 
