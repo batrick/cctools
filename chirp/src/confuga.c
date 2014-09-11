@@ -77,7 +77,7 @@ static int db_init (confuga *C)
 		"CREATE TABLE Confuga.StorageNode ("
 		"	id INTEGER PRIMARY KEY,"
 		/* Confuga fields (some overlap with catalog_server fields) */
-		"	hostport TEXT NOT NULL,"
+		"	hostport TEXT UNIQUE NOT NULL,"
 		"	root TEXT NOT NULL DEFAULT '/.confuga',"
 		"	time_create DATETIME NOT NULL DEFAULT (strftime('%s', 'now')),"
 		"	time_delete DATETIME,"
@@ -276,6 +276,23 @@ out:
 	return rc;
 }
 
+static int setroot (confuga *C, const char *root)
+{
+	int rc;
+	char namespace[CONFUGA_PATH_MAX] = "";
+
+	strncpy(C->root, root, sizeof(C->root)-1);
+	CATCHUNIX(create_dir(C->root, S_IRWXU) ? 0 : -1);
+	snprintf(namespace, sizeof(namespace)-1, "%s/root", C->root);
+	CATCHUNIX(create_dir(namespace, S_IRWXU) ? 0 : -1);
+	CATCH(confugaI_dbload(C, NULL));
+
+	rc = 0;
+	goto out;
+out:
+	return rc;
+}
+
 static int parse_uri (confuga *C, const char *uri)
 {
 	int rc;
@@ -285,10 +302,10 @@ static int parse_uri (confuga *C, const char *uri)
 	char *value = NULL;
 	char *subvalue = NULL;
 
-	if (pattern_match(uri, "(.-)%?(.*)", &root, &options) >= 0) {
+	if (pattern_match(uri, "confuga://(..-)%?(.*)", &root, &options) >= 0) {
 		const char *rest = options;
 		size_t n;
-		strncpy(C->root, root, sizeof(C->root)-1);
+		CATCH(setroot(C, root));
 
 		while (pattern_match(rest, "(%w+)=([^&]*)&?()", &option, &value, &n) >= 0) {
 			if (strcmp(option, "concurrency") == 0) {
@@ -306,7 +323,7 @@ static int parse_uri (confuga *C, const char *uri)
 					CATCH(confuga_replication_strategy(C, CONFUGA_REPLICATION_PUSH_ASYNCHRONOUS, strtoul(subvalue, NULL, 10)));
 				} else CATCH(EINVAL);
 			} else if (strcmp(option, "nodes") == 0) {
-				CATCH(confuga_nodes(C, subvalue));
+				CATCH(confuga_nodes(C, value));
 			} else {
 				debug(D_NOTICE|D_CONFUGA, "unknown URI option `%s'", option);
 				CATCH(EINVAL);
@@ -321,7 +338,7 @@ static int parse_uri (confuga *C, const char *uri)
 			CATCH(EINVAL);
 		}
 	} else {
-		strncpy(C->root, uri, sizeof(C->root)-1);
+		CATCH(setroot(C, uri));
 	}
 
 	rc = 0;
@@ -335,33 +352,26 @@ out:
 	return rc;
 }
 
-CONFUGA_API int confuga_connect (confuga **Cp, const char *root, const char *catalog)
+CONFUGA_API int confuga_connect (confuga **Cp, const char *uri, const char *catalog)
 {
 	int rc;
-	char namespace[CONFUGA_PATH_MAX] = "";
 	confuga *C = NULL;
 
-	debug(D_CONFUGA, "connecting to confuga://%s", root);
+	debug(D_CONFUGA, "connecting to %s", uri);
 	debug(D_DEBUG, "using sqlite version %s", sqlite3_libversion());
 
 	C = malloc(sizeof(confuga));
 	if (C == NULL) CATCH(ENOMEM);
+	memset(C, 0, sizeof(*C));
 	C->concurrency = 0;
 	C->scheduler = CONFUGA_SCHEDULER_FIFO;
 	C->scheduler_n = 1;
 	C->replication = CONFUGA_REPLICATION_PUSH_ASYNCHRONOUS;
 	C->replication_n = UINT64_MAX;
-	strncpy(C->root, "", sizeof(C->root));
 
-	CATCH(parse_uri(C, root));
-
-	CATCHUNIX(create_dir(C->root, S_IRWXU) ? 0 : -1);
-	snprintf(namespace, sizeof(namespace)-1, "%s/root", C->root);
-	CATCHUNIX(create_dir(namespace, S_IRWXU) ? 0 : -1);
+	CATCH(parse_uri(C, uri));
 
 	CATCH(setup_ticket(C));
-
-	CATCH(confugaI_dbload(C, NULL));
 	CATCH(confugaS_catalog(C, catalog));
 
 	*Cp = C;
@@ -392,7 +402,7 @@ CONFUGA_API int confuga_nodes (confuga *C, const char *nodes)
 	} else CATCH(EINVAL);
 
 	rest = node;
-	while (pattern_match(rest, "chirp://([^/,%s]+)([^,%s]*)", &hostname, &root, &n) >= 0) {
+	while (pattern_match(rest, "^[%s,]*chirp://([^/,%s]+)([^,%s]*)()", &hostname, &root, &n) >= 0) {
 		CATCH(confugaS_node_insert(C, hostname, root));
 		rest += n;
 		hostname = realloc(hostname, 0);

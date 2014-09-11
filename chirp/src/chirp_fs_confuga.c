@@ -95,14 +95,8 @@ static int chirp_fs_confuga_init (const char url[CHIRP_PATH_MAX])
 {
 	int rc;
 	int i;
-	char root[CHIRP_PATH_MAX];
 
-	debug(D_CONFUGA, "url: %s", url);
-
-	assert(strprfx(url, "confuga://"));
-	path_collapse(url+strlen("confuga://"), root, 1);
-
-	CATCH_CONFUGA(confuga_connect(&C, root, list_peek_head(catalog_host_list)));
+	CATCH_CONFUGA(confuga_connect(&C, url, list_peek_head(catalog_host_list)));
 	CATCH_CONFUGA(confuga_concurrency(C, chirp_job_concurrency));
 
 	for (i = 0; i < CHIRP_FILESYSTEM_MAXFD; i++)

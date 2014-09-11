@@ -215,12 +215,15 @@ CONFUGA_IAPI int confugaS_node_insert (confuga *C, const char *hostport, const c
 	sqlite3_stmt *stmt = NULL;
 	const char *current = SQL;
 
+	if (strlen(root) == 0)
+		root = "/";
+
 	sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
 	sqlcatch(sqlite3_bind_text(stmt, 1, hostport, -1, SQLITE_TRANSIENT));
 	sqlcatch(sqlite3_bind_text(stmt, 2, root, -1, SQLITE_TRANSIENT));
 	sqlcatchcode(sqlite3_step(stmt), SQLITE_DONE);
 	if (sqlite3_changes(db) == 1)
-		debug(D_CONFUGA, "Storage Node %d chirp://%s/%s online", (int)sqlite3_last_insert_rowid(db), hostport, root);
+		debug(D_CONFUGA, "Storage Node %d (chirp://%s/%s) online", (int)sqlite3_last_insert_rowid(db), hostport, root);
 	sqlcatch(sqlite3_finalize(stmt); stmt = NULL);
 
 	rc = 0;
