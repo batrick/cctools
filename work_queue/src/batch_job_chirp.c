@@ -345,6 +345,7 @@ int batch_fs_chirp_stat (struct batch_queue *q, const char *path, struct stat *b
 	if (rc >= 0) {
 		COPY_STATC(cbuf, *buf);
 	}
+	debug(D_BATCH, "= %d", rc);
 	return rc;
 }
 
