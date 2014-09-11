@@ -31,7 +31,7 @@ $(INSTALL_PACKAGES): $(CCTOOLS_PACKAGES)
 	@$(MAKE) -C $(@:install-%=%) install
 install: $(INSTALL_PACKAGES)
 	mkdir -p $(CCTOOLS_INSTALL_DIR)/bin
-	cp ssh-chirps confuga-load load-balance.py $(CCTOOLS_INSTALL_DIR)/bin
+	cp ssh-chirps confuga-load load-balance*.py $(CCTOOLS_INSTALL_DIR)/bin
 	for file in $(CYGWINLIB) ; do if [ -f /bin/$$file ] ; then cp /bin/$$file $(CCTOOLS_INSTALL_DIR)/bin/ ; fi ; done
 	mkdir -p ${CCTOOLS_INSTALL_DIR}/etc
 	cp config.mk ${CCTOOLS_INSTALL_DIR}/etc/
