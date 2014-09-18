@@ -160,6 +160,7 @@ out:
 	return rc;
 }
 
+#define MAX_SIZE_HASH  (1<<26)
 static int interpolate (chirp_jobid_t id, char task_path[CHIRP_PATH_MAX], char serv_path[CHIRP_PATH_MAX])
 {
 	int rc;
@@ -167,14 +168,26 @@ static int interpolate (chirp_jobid_t id, char task_path[CHIRP_PATH_MAX], char s
 
 	for (mark = serv_path; (mark = strchr(mark, '%')); ) {
 		switch (mark[1]) {
+			case 'g':
 			case 'h':
-			case 'g': {
+			case 's':
+			{
 				/* replace with hash of task_path */
 				unsigned char digest[SHA1_DIGEST_LENGTH];
 				if (mark[1] == 'h')
 					CATCHUNIX(sha1_file(task_path, digest) ? 0 : -1);
 				else if (mark[1] == 'g')
 					sqlite3_randomness(SHA1_DIGEST_LENGTH, digest);
+				else if (mark[1] == 's') {
+					struct stat64 buf;
+					CATCHUNIX(stat64(task_path, &buf));
+					if (buf.st_size <= MAX_SIZE_HASH) {
+						CATCHUNIX(sha1_file(task_path, digest) ? 0 : -1);
+					} else {
+						sqlite3_randomness(SHA1_DIGEST_LENGTH, digest);
+					}
+				}
+
 				if (strlen(serv_path)+sizeof(digest)*2 < CHIRP_PATH_MAX) {
 					size_t i;
 					memmove(mark+sizeof(digest)*2, mark+2, strlen(mark+2)+1);
@@ -191,7 +204,8 @@ static int interpolate (chirp_jobid_t id, char task_path[CHIRP_PATH_MAX], char s
 				}
 				break;
 			}
-			case 'j': {
+			case 'j':
+			{
 				char str[64];
 				CATCHUNIX(snprintf(str, sizeof(str), "%" PRICHIRP_JOBID_T, id));
 				assert((size_t)rc < sizeof(str));

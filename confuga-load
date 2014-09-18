@@ -53,6 +53,7 @@ for concurrency in 20 16 12 08 04 02 01; do
 			mkdir "$base" || exit 1
 			echo "$CONFUGA_NODE_LIST" > "${base}/nodes.lst"
 
+			eval "$CONFUGA_NODE_NUKE"
 			runbg "$CHIRP_SERVER" --auth=unix --catalog-update=30s --challenge-dir="${base}/" --debug=all --debug-file="${base}/confuga.debug" --debug-rotate-max=0 --interface=127.0.0.1 --jobs --job-concurrency="$concurrency" --pid-file="${base}/confuga.pid" --port="$PORT" --root="confuga://${base}/confuga.root?scheduler=${scheduler}&replication=${replication}&nodes=file:${base}/nodes.lst" --superuser="unix:$(whoami)" --transient="${base}/confuga.transient"
 
 			run "$CHIRP" --auth=unix --debug=chirp --debug-file="${base}/chirp.debug" --timeout=60m localhost:"$PORT" put "$DIR/"

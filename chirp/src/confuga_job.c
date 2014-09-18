@@ -798,7 +798,7 @@ static int encode (confuga *C, chirp_jobid_t id, buffer_t *B)
 		"			INNER JOIN Confuga.StorageNode ON ConfugaJob.sid = StorageNode.id"
 		"		WHERE ConfugaInputFile.jid = ?"
 		"UNION ALL"
-		"	SELECT 'OUTPUT', StorageNode.root || '/file/%g', task_path, 'LINK'"
+		"	SELECT 'OUTPUT', StorageNode.root || '/file/%s', task_path, 'LINK'"
 		"		FROM"
 		"			JobFile"
 		"			INNER JOIN ConfugaJob ON JobFile.id = ConfugaJob.id"

@@ -414,7 +414,6 @@ CONFUGA_API int confuga_file_close (confuga_file *file, confuga_fid_t *fid, conf
 	CATCHUNIX(chirp_reli_close(file->stream, stoptime));
 	file->stream = NULL;
 	sha1_final(fid->id, &file->context);
-	sqlite3_randomness(sizeof(fid->id), fid->id); // FIXME hack (remove): so all uploaded files always have a new GUID for tests
 	*size = file->size;
 	char replica[CONFUGA_PATH_MAX];
 	snprintf(replica, sizeof(replica), "%s/file/" CONFUGA_FID_PRIFMT, file->host.root, CONFUGA_FID_PRIARGS(*fid));
