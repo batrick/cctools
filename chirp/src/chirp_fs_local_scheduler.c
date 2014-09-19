@@ -160,7 +160,7 @@ out:
 	return rc;
 }
 
-#define MAX_SIZE_HASH  (1<<26)
+#define MAX_SIZE_HASH  (1<<27)
 static int interpolate (chirp_jobid_t id, char task_path[CHIRP_PATH_MAX], char serv_path[CHIRP_PATH_MAX])
 {
 	int rc;
