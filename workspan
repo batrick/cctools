@@ -46,7 +46,6 @@ SELECT x, StorageNode.id, COUNT(ConfugaJob.id)
 	--WHERE Job.time_start <= x AND x <= Job.time_finish
 	GROUP BY x, StorageNode.id;
 EOF
-echo "$data"
 #entries=$(wc -l "$data" | cut -f1 -d' ')
 #tasks="${entries}"
 
@@ -57,7 +56,9 @@ set pm3d map
 
 set title "Job Heat-Map"
 set xlabel "Time (seconds)"
+set xtics rotate out
 set ylabel "Storage Node"
+set ytics 1,1
 splot "$data" u 1:2:3
 EOF
 

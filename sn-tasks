@@ -36,16 +36,15 @@ WITH
 			WHERE ConfugaJob.state = 'BOUND_OUTPUTS'
 			GROUP BY StorageNode.id
 	)
-SELECT StorageNode.id, SendingTJ.n, ReceivingTJ.n, ProcessingJ.n
+SELECT StorageNode.id, CASE WHEN SendingTJ.n IS NULL THEN 0 ELSE SendingTJ.n END, CASE WHEN ReceivingTJ.n IS NULL THEN 0 ELSE ReceivingTJ.n END, CASE WHEN ProcessingJ.n IS NULL THEN 0 ELSE ProcessingJ.n END
 	FROM
 		Confuga.StorageNode
 		LEFT OUTER JOIN SendingTJ ON StorageNode.id = SendingTJ.id
 		LEFT OUTER JOIN ReceivingTJ ON StorageNode.id = ReceivingTJ.id
 		LEFT OUTER JOIN ProcessingJ ON StorageNode.id = ProcessingJ.id
-	WHERE NOT (SendingTJ.n IS NULL AND ReceivingTJ.n IS NULL AND ProcessingJ.n IS NULL)
+	--WHERE NOT (SendingTJ.n IS NULL AND ReceivingTJ.n IS NULL AND ProcessingJ.n IS NULL)
 	ORDER BY StorageNode.id;
 EOF
-entries=$(wc -l "$data" | cut -f1 -d' ')
 
 gnuplot <<EOF
 set terminal svg
@@ -58,14 +57,14 @@ set style histogram rowstacked
 set style data histograms
 set title "TJ Source, TJ Target, and Job Executor"
 set xlabel "Storage Node"
-set xtics 0,1,$((entries-1))
+set xtics 1
 set xtics rotate out
 set ylabel "Count"
 
 #set size ratio 0.5
 set style fill pattern 2
 
-plot [0:] "${data}" using 2 title "Source", "" u 3 title "Target", "" u 4 title "Executor"
+plot "${data}" using 2:xticlabels(1) title "Source", "" using 3:xticlabels(1) title "Target", "" using 4:xticlabels(1) title "Executor"
 EOF
 
 # vim: set noexpandtab tabstop=4:
