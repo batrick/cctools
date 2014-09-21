@@ -7,6 +7,7 @@ confuga=$(realpath "$2")
 
 data=$(mktemp)
 
+echo $0
 sqlite3 -separator $'\t' > "$data"  <<EOF
 ATTACH 'file://${job}?mode=ro' as Job;
 ATTACH 'file://${confuga}?mode=ro' as Confuga;
@@ -17,6 +18,7 @@ UNION ALL
 SELECT Job.id, Job.time_finish, -1
 	FROM Job.Job;
 EOF
+cat "$data"
 
 gnuplot <<EOF
 set terminal svg

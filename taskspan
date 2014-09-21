@@ -7,6 +7,7 @@ confuga=$(realpath "$2")
 
 data=$(mktemp)
 
+echo $0
 sqlite3 -separator $'\t' > "$data"  <<EOF
 ATTACH 'file://${job}?mode=ro' as Job;
 ATTACH 'file://${confuga}?mode=ro' as Confuga;
@@ -15,6 +16,8 @@ SELECT Job.id, Job.time_start, Job.time_finish, MAX(Job.time_finish-Job.time_sta
 	FROM Job.Job
 	WHERE Job.status = 'FINISHED';
 EOF
+cat "$data"
+
 entries=$(wc -l "$data" | cut -f1 -d' ')
 tasks="${entries}"
 

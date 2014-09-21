@@ -7,6 +7,7 @@ confuga=$(realpath "$2")
 
 data=$(mktemp)
 
+echo $0
 # FIXME MIN/MAX aggregator for Start/Finish
 {
 	sqlite3 -separator $'\t' | awk '$1 != prev {printf "\n"; prev = $1}; {print}' > "$data"
@@ -46,6 +47,7 @@ SELECT x, StorageNode.id, COUNT(ConfugaJob.id)
 	--WHERE Job.time_start <= x AND x <= Job.time_finish
 	GROUP BY x, StorageNode.id;
 EOF
+cat "$data"
 #entries=$(wc -l "$data" | cut -f1 -d' ')
 #tasks="${entries}"
 

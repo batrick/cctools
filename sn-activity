@@ -7,6 +7,7 @@ confuga=$(realpath "$2")
 
 data=$(mktemp)
 
+echo $0
 sqlite3 -separator $'\t' > "$data"  <<EOF
 ATTACH 'file://${job}?mode=ro' as Job;
 ATTACH 'file://${confuga}?mode=ro' as Confuga;
@@ -44,6 +45,7 @@ SELECT id, TransferredBytes.sent, ReceivedBytes.received, ProcessedBytes.process
 	FROM TransferredBytes NATURAL JOIN ReceivedBytes NATURAL JOIN ProcessedBytes
 	ORDER BY id;
 EOF
+cat "$data"
 entries=$(wc -l "$data" | cut -f1 -d' ')
 
 gnuplot <<EOF
