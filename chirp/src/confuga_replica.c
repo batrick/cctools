@@ -91,7 +91,7 @@ out:
 }
 
 /* N.B. must have open transaction. */
-CONFUGA_IAPI int confugaR_replicate (confuga *C, confuga_fid_t fid, sqlite3_int64 sid, time_t stoptime)
+CONFUGA_IAPI int confugaR_replicate (confuga *C, confuga_fid_t fid, confuga_sid_t sid, time_t stoptime)
 {
 	static const char SQL[] =
 		/* Check for Replica. */
@@ -103,13 +103,16 @@ CONFUGA_IAPI int confugaR_replicate (confuga *C, confuga_fid_t fid, sqlite3_int6
 		"	FROM Confuga.StorageNode"
 		"	WHERE id = ?;"
 		/* Get current Storage Nodes hosting the File. */
-		"SELECT FileReplicas.size, StorageNodeActive.hostport, StorageNodeActive.root"
+		"SELECT FileReplicas.size, StorageNodeActive.sid, StorageNodeActive.hostport, StorageNodeActive.root"
 		"	FROM"
 		"		Confuga.FileReplicas"
 		"		JOIN Confuga.StorageNodeActive ON FileReplicas.sid = StorageNodeActive.id"
 		"	WHERE fid = ?;"
 		/* Insert new Replica. */
-		"INSERT OR IGNORE INTO Confuga.Replica (fid, sid) VALUES (?, ?);";
+		"INSERT OR IGNORE INTO Confuga.Replica (fid, sid) VALUES (?, ?);"
+		/* Insert a fake TransferJob for records... */
+		"INSERT INTO Confuga.TransferJob (state, fid, fsid, tsid, progress, time_new, time_commit, time_complete)"
+		"	VALUES ('COMPLETED', ?1, ?2, ?3, ?4, ?5, ?5, strftime('%s', 'now'));";
 
 	int rc;
 	sqlite3 *db = C->db;
@@ -118,6 +121,11 @@ CONFUGA_IAPI int confugaR_replicate (confuga *C, confuga_fid_t fid, sqlite3_int6
 	struct confuga_host host_to;
 	char replica_open[CONFUGA_PATH_MAX];
 	char replica_closed[CONFUGA_PATH_MAX];
+	time_t start;
+	confuga_sid_t fsid;
+	confuga_off_t size;
+
+	debug(D_DEBUG, "synchronously replicating " CONFUGA_FID_PRIFMT " to " CONFUGA_SID_PRIFMT, CONFUGA_FID_PRIARGS(fid), sid);
 
 	sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
 	sqlcatch(sqlite3_bind_blob(stmt, 1, fid.id, sizeof(fid.id), SQLITE_STATIC));
@@ -150,14 +158,18 @@ CONFUGA_IAPI int confugaR_replicate (confuga *C, confuga_fid_t fid, sqlite3_int6
 		INT64_T result;
 		struct confuga_host host_from;
 		char replica_from[CONFUGA_PATH_MAX];
-		confuga_off_t size;
 		time_t timeout = time(0)+60; /* wait at least 1 minute */
+
 		size = (confuga_off_t)sqlite3_column_int64(stmt, 0);
 		timeout += size/(50*1024); /* at least 50 KBps */
 		debug(D_DEBUG, "file size is %" PRICONFUGA_OFF_T "; adding %" PRIu64 " to timeout", size, (uint64_t)size/(50*1024));
-		snprintf(host_from.hostport, sizeof(host_from.hostport), "%s", (const char *)sqlite3_column_text(stmt, 1));
-		snprintf(host_from.root, sizeof(host_from.root), "%s", (const char *)sqlite3_column_text(stmt, 2));
+
+		start = time(NULL);
+		fsid = sqlite3_column_int64(stmt, 1);
+		snprintf(host_from.hostport, sizeof(host_from.hostport), "%s", (const char *)sqlite3_column_text(stmt, 2));
+		snprintf(host_from.root, sizeof(host_from.root), "%s", (const char *)sqlite3_column_text(stmt, 3));
 		snprintf(replica_from, sizeof(replica_from), "%s/file/" CONFUGA_FID_PRIFMT, host_from.root, CONFUGA_FID_PRIARGS(fid));
+
 		result = chirp_reli_thirdput(host_from.hostport, replica_from, host_to.hostport, replica_open, timeout);
 		if (result >= 0) {
 			rc = chirp_reli_rename(host_to.hostport, replica_open, replica_closed, time(0)+30);
@@ -175,6 +187,16 @@ replicated:
 	sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
 	sqlcatch(sqlite3_bind_blob(stmt, 1, fid.id, sizeof(fid.id), SQLITE_STATIC));
 	sqlcatch(sqlite3_bind_int64(stmt, 2, sid));
+	sqlcatchcode(sqlite3_step(stmt), SQLITE_DONE);
+	assert(sqlite3_changes(db));
+	sqlcatch(sqlite3_finalize(stmt); stmt = NULL);
+
+	sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
+	sqlcatch(sqlite3_bind_blob(stmt, 1, fid.id, sizeof(fid.id), SQLITE_STATIC));
+	sqlcatch(sqlite3_bind_int64(stmt, 2, fsid));
+	sqlcatch(sqlite3_bind_int64(stmt, 3, sid));
+	sqlcatch(sqlite3_bind_int64(stmt, 4, size));
+	sqlcatch(sqlite3_bind_int64(stmt, 5, start));
 	sqlcatchcode(sqlite3_step(stmt), SQLITE_DONE);
 	assert(sqlite3_changes(db));
 	sqlcatch(sqlite3_finalize(stmt); stmt = NULL);

@@ -40,7 +40,7 @@ struct confuga {
 CONFUGA_IAPI int confugaI_dbload (confuga *C, sqlite3 *attachdb);
 CONFUGA_IAPI int confugaI_dbclose (confuga *C);
 
-CONFUGA_IAPI int confugaR_replicate (confuga *C, confuga_fid_t fid, sqlite3_int64 sid, time_t stoptime);
+CONFUGA_IAPI int confugaR_replicate (confuga *C, confuga_fid_t fid, confuga_sid_t sid, time_t stoptime);
 CONFUGA_IAPI int confugaR_register (confuga *C, confuga_fid_t fid, confuga_off_t size, const struct confuga_host *host);
 CONFUGA_IAPI int confugaR_manager (confuga *C);
 

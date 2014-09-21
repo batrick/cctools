@@ -476,7 +476,7 @@ static int dispatch (confuga *C, chirp_jobid_t id)
 	sqlite3 *db = C->db;
 	sqlite3_stmt *stmt = NULL;
 	const char *current = SQL;
-	sqlite3_int64 sid;
+	confuga_sid_t sid;
 
 	sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
 	sqlcatchcode(sqlite3_step(stmt), SQLITE_DONE);
@@ -487,7 +487,7 @@ static int dispatch (confuga *C, chirp_jobid_t id)
 	rc = sqlite3_step(stmt);
 	if (rc == SQLITE_ROW) {
 		sid = sqlite3_column_int64(stmt, 0);
-		debug(D_CONFUGA, "job %" PRICHIRP_JOBID_T ": scheduling on sid %" PRIu64, id, (uint64_t)sid);
+		debug(D_CONFUGA, "job %" PRICHIRP_JOBID_T ": scheduling on " CONFUGA_SID_PRIFMT, id, sid);
 	} else if (rc == SQLITE_DONE) {
 		debug(D_DEBUG, "job %" PRICHIRP_JOBID_T ": could not schedule yet", id);
 		THROW_QUIET(EAGAIN); /* come back later */
@@ -768,7 +768,7 @@ static int job_replicate (confuga *C)
 	sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
 	while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
 		chirp_jobid_t id = sqlite3_column_int64(stmt, 0);
-		sqlite3_int64 sid = sqlite3_column_int64(stmt, 1);
+		confuga_sid_t sid = sqlite3_column_int64(stmt, 1);
 		if (C->replication == CONFUGA_REPLICATION_PUSH_SYNCHRONOUS)
 			CATCHJOB(C, id, replicate_push_synchronous(C, id, sid));
 		else if (C->replication == CONFUGA_REPLICATION_PUSH_ASYNCHRONOUS)
