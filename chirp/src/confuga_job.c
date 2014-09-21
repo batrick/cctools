@@ -487,7 +487,7 @@ static int dispatch (confuga *C, chirp_jobid_t id)
 	rc = sqlite3_step(stmt);
 	if (rc == SQLITE_ROW) {
 		sid = sqlite3_column_int64(stmt, 0);
-		debug(D_CONFUGA, "job %" PRICHIRP_JOBID_T ": scheduling on " CONFUGA_SID_PRIFMT, id, sid);
+		debug(D_CONFUGA, "job %" PRICHIRP_JOBID_T ": scheduling on " CONFUGA_SID_DEBFMT, id, sid);
 	} else if (rc == SQLITE_DONE) {
 		debug(D_DEBUG, "job %" PRICHIRP_JOBID_T ": could not schedule yet", id);
 		THROW_QUIET(EAGAIN); /* come back later */

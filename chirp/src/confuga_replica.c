@@ -103,7 +103,7 @@ CONFUGA_IAPI int confugaR_replicate (confuga *C, confuga_fid_t fid, confuga_sid_
 		"	FROM Confuga.StorageNode"
 		"	WHERE id = ?;"
 		/* Get current Storage Nodes hosting the File. */
-		"SELECT FileReplicas.size, StorageNodeActive.sid, StorageNodeActive.hostport, StorageNodeActive.root"
+		"SELECT FileReplicas.size, StorageNodeActive.id, StorageNodeActive.hostport, StorageNodeActive.root"
 		"	FROM"
 		"		Confuga.FileReplicas"
 		"		JOIN Confuga.StorageNodeActive ON FileReplicas.sid = StorageNodeActive.id"
@@ -125,7 +125,7 @@ CONFUGA_IAPI int confugaR_replicate (confuga *C, confuga_fid_t fid, confuga_sid_
 	confuga_sid_t fsid;
 	confuga_off_t size;
 
-	debug(D_DEBUG, "synchronously replicating " CONFUGA_FID_PRIFMT " to " CONFUGA_SID_PRIFMT, CONFUGA_FID_PRIARGS(fid), sid);
+	debug(D_DEBUG, "synchronously replicating " CONFUGA_FID_DEBFMT " to " CONFUGA_SID_DEBFMT, CONFUGA_FID_PRIARGS(fid), sid);
 
 	sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
 	sqlcatch(sqlite3_bind_blob(stmt, 1, fid.id, sizeof(fid.id), SQLITE_STATIC));

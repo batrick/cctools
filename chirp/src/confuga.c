@@ -535,7 +535,7 @@ CONFUGA_API int confuga_statfs (confuga *C, struct confuga_statfs *info)
 	info->type = 0x46554741;
 	info->flag = 0;
 
-	debug(D_CONFUGA, "= " CONFUGA_STATFS_PRIFMT, CONFUGA_STATFS_PRIARGS(*info));
+	debug(D_CONFUGA, "= " CONFUGA_STATFS_DEBFMT, CONFUGA_STATFS_PRIARGS(*info));
 
 	rc = 0;
 	goto out;

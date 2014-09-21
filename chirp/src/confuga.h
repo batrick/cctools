@@ -34,12 +34,14 @@ typedef struct confuga confuga;
 typedef struct {
 	unsigned char id[20]; /* binary SHA1 digest (hardcoded so we don't need to include the header) */
 } confuga_fid_t;
-#define CONFUGA_FID_PRIFMT "fid:%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X"
+#define CONFUGA_FID_PRIFMT "%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X"
+#define CONFUGA_FID_DEBFMT "fid:" CONFUGA_FID_PRIFMT
 #define CONFUGA_FID_PRIARGS(fid) \
 	(unsigned int) (fid).id[0], (unsigned int) (fid).id[1], (unsigned int) (fid).id[2], (unsigned int) (fid).id[3], (unsigned int) (fid).id[4], (unsigned int) (fid).id[5], (unsigned int) (fid).id[6], (unsigned int) (fid).id[7], (unsigned int) (fid).id[8], (unsigned int) (fid).id[9], (unsigned int) (fid).id[10], (unsigned int) (fid).id[11], (unsigned int) (fid).id[12], (unsigned int) (fid).id[13], (unsigned int) (fid).id[14], (unsigned int) (fid).id[15], (unsigned int) (fid).id[16], (unsigned int) (fid).id[17], (unsigned int) (fid).id[18], (unsigned int) (fid).id[19]
 
 typedef uint64_t confuga_sid_t;
-#define CONFUGA_SID_PRIFMT "sid:%04" PRIu64
+#define CONFUGA_SID_PRIFMT "%" PRIu64
+#define CONFUGA_SID_DEBFMT "sid:%04" PRIu64
 
 /* `sha1sum < /dev/null` */
 #define CONFUGA_FID_EMPTY "\xDA\x39\xA3\xEE\x5E\x6B\x4B\x0D\x32\x55\xBF\xEF\x95\x60\x18\x90\xAF\xD8\x07\x09"
@@ -85,7 +87,7 @@ struct confuga_statfs {
 	uint64_t type;
 	uint64_t flag;
 };
-#define CONFUGA_STATFS_PRIFMT \
+#define CONFUGA_STATFS_DEBFMT \
 	"stat:{" \
 		"bsize = %" PRIu64 ", " \
 		"blocks = %" PRIu64 ", " \
