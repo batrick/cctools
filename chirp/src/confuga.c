@@ -117,18 +117,17 @@ static int db_init (confuga *C)
 		"	SELECT * FROM File JOIN Replica ON File.id = Replica.fid;"
 		"CREATE TABLE Confuga.TransferJob ("
 		"	id INTEGER PRIMARY KEY AUTOINCREMENT," /* AUTOINCREMENT to ensure ROWID is never reallocated (i.e. forever unique) */
-		/* FIXME we need a 'status' field like regular Jobs, we also could use a Public View to "hide" internal state? */
 		"	cid INTEGER," /* job id on fsid */
-		"	fsid INTEGER NOT NULL REFERENCES StorageNode (id)," /* from SN */
 		"	fid BLOB NOT NULL REFERENCES File (id),"
-		"	tsid INTEGER NOT NULL REFERENCES StorageNode (id)," /* to SN */
+		"	fsid INTEGER NOT NULL REFERENCES StorageNode (id)," /* from SN */
 		"	open TEXT," /* open file ID on tsid */
 		"	progress INTEGER,"
 		"	state TEXT NOT NULL REFERENCES TransferJobState (state),"
-		"	time_new DATETIME NOT NULL DEFAULT (strftime('%s', 'now')),"
 		"	time_commit DATETIME,"
 		"	time_complete DATETIME,"
 		"	time_error DATETIME,"
+		"	time_new DATETIME NOT NULL DEFAULT (strftime('%s', 'now')),"
+		"	tsid INTEGER NOT NULL REFERENCES StorageNode (id)," /* to SN */
 		/* cid status */
 		"	error TEXT,"
 		"	exit_code INTEGER,"

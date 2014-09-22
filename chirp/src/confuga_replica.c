@@ -109,7 +109,7 @@ CONFUGA_IAPI int confugaR_replicate (confuga *C, confuga_fid_t fid, confuga_sid_
 		"		JOIN Confuga.StorageNodeActive ON FileReplicas.sid = StorageNodeActive.id"
 		"	WHERE fid = ?;"
 		/* Insert new Replica. */
-		"INSERT OR IGNORE INTO Confuga.Replica (fid, sid) VALUES (?, ?);"
+		"INSERT INTO Confuga.Replica (fid, sid) VALUES (?, ?);"
 		/* Insert a fake TransferJob for records... */
 		"INSERT INTO Confuga.TransferJob (state, fid, fsid, tsid, progress, time_new, time_commit, time_complete)"
 		"	VALUES ('COMPLETED', ?1, ?2, ?3, ?4, ?5, ?5, strftime('%s', 'now'));";
@@ -191,15 +191,19 @@ replicated:
 	assert(sqlite3_changes(db));
 	sqlcatch(sqlite3_finalize(stmt); stmt = NULL);
 
-	sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
-	sqlcatch(sqlite3_bind_blob(stmt, 1, fid.id, sizeof(fid.id), SQLITE_STATIC));
-	sqlcatch(sqlite3_bind_int64(stmt, 2, fsid));
-	sqlcatch(sqlite3_bind_int64(stmt, 3, sid));
-	sqlcatch(sqlite3_bind_int64(stmt, 4, size));
-	sqlcatch(sqlite3_bind_int64(stmt, 5, start));
-	sqlcatchcode(sqlite3_step(stmt), SQLITE_DONE);
-	assert(sqlite3_changes(db));
-	sqlcatch(sqlite3_finalize(stmt); stmt = NULL);
+	if (fsid) {
+		/* fsid is 0 if it was already there... (access) */
+		sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
+		debug(D_DEBUG, CONFUGA_FID_DEBFMT " " CONFUGA_SID_DEBFMT " " CONFUGA_SID_DEBFMT " %zu %ld", CONFUGA_FID_PRIARGS(fid), fsid, sid, size, start);
+		sqlcatch(sqlite3_bind_blob(stmt, 1, fid.id, sizeof(fid.id), SQLITE_STATIC));
+		sqlcatch(sqlite3_bind_int64(stmt, 2, fsid));
+		sqlcatch(sqlite3_bind_int64(stmt, 3, sid));
+		sqlcatch(sqlite3_bind_int64(stmt, 4, size));
+		sqlcatch(sqlite3_bind_int64(stmt, 5, start));
+		sqlcatchcode(sqlite3_step(stmt), SQLITE_DONE);
+		assert(sqlite3_changes(db));
+		sqlcatch(sqlite3_finalize(stmt); stmt = NULL);
+	}
 
 	rc = 0;
 	goto out;
