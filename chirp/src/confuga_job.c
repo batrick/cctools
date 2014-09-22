@@ -560,12 +560,13 @@ static int replicate_push_synchronous (confuga *C, chirp_jobid_t id, sqlite3_int
 {
 	static const char SQL[] =
 		"BEGIN TRANSACTION;"
+		/* unreplicated files */
 		"SELECT ConfugaInputFile.fid, ConfugaJob.sid, Replica.sid"
 		"	FROM"
-		"		ConfugaInputFile"
-		"		INNER JOIN ConfugaJob ON ConfugaInputFile.jid = ConfugaJob.id"
-		"		LEFT OUTER JOIN Confuga.Replica ON ConfugaJob.sid = Replica.sid"
-		"	WHERE ConfugaInputFile.jid = ?;"
+		"		ConfugaJob"
+		"		JOIN ConfugaInputFile ON ConfugaJob.id = ConfugaInputFile.jid"
+		"		LEFT OUTER JOIN Confuga.Replica ON ConfugaInputFile.fid = Replica.fid AND ConfugaJob.sid = Replica.sid"
+		"	WHERE ConfugaJob.id = ?1 AND Replica.sid IS NULL AND Replica.fid IS NULL;"
 		"UPDATE ConfugaJob"
 		"	SET"
 		"		state = 'REPLICATED',"
@@ -625,7 +626,7 @@ static int replicate_push_asynchronous (confuga *C, chirp_jobid_t id)
 		"		ConfugaJob"
 		"		JOIN ConfugaInputFile ON ConfugaJob.id = ConfugaInputFile.jid"
 		"		LEFT OUTER JOIN Confuga.Replica ON ConfugaInputFile.fid = Replica.fid AND ConfugaJob.sid = Replica.sid"
-		"	WHERE id = ?1 AND Replica.fid IS NULL AND Replica.sid IS NULL;"
+		"	WHERE ConfugaJob.id = ?1 AND Replica.fid IS NULL AND Replica.sid IS NULL;"
 			/* If fully replicated, set to REPLICATED */
 			"UPDATE ConfugaJob"
 			"	SET"
