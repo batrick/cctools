@@ -32,8 +32,11 @@ binwidth = 10
 
 set title "Taskspan (${tasks} tasks)"
 set xlabel "Time (seconds)"
+set xr [0:]
+
 set ylabel "Frequency"
 set boxwidth binwidth
+
 plot [][-0.25:1] "${data}" u 4:(0.05*rand(0)-.1) title "Jitter", "" using (bin(\$4,binwidth)):(1./(${entries})) title "Task Span" smooth frequency with boxes
 # For normalized histogram:
 # plot [][-0.25:1] "${data}" u 4:(0.05*rand(0)-.1) title "Jitter", "" using (bin(\$4,binwidth)):(1./(binwidth*${entries})) title "Task Span" smooth frequency with boxes

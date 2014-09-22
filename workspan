@@ -57,11 +57,23 @@ set output 'workspan.svg'
 set pm3d map
 
 set title "Job Heat-Map"
-set xlabel "Time (seconds)"
-set xtics rotate out
+
+set timefmt "%s"
+set xdata time
+set format x "%H:%M"
+set xlabel "Time (Minutes)"
+set xtics rotate by -45
+
+set palette defined (0 "white", 1 "black")
+
 set ylabel "Storage Node"
 set ytics 1,1
-splot "$data" u 1:2:3
+
+first=0;
+offset=0;
+func(x)=(offset=(first==0)?x:offset,first=1,x-offset)
+
+splot "$data" u (func(\$1)):2:(ceil(\$3))
 EOF
 
 # vim: set noexpandtab tabstop=4:
