@@ -25,12 +25,12 @@ set output 'cumulative.svg'
 set xdata time
 set timefmt "%s"
 set format x "%H:%M"
-set xlabel "time (minutes)"
+set xlabel "Time (Minutes)"
 
-set ylabel "transferred (bytes)"
+set ylabel "Transferred (MB)"
 set format y "%0.1e"
 
-plot "${data}" using 2:3 title "Cumulative Transfer" smooth cumulative
+plot "${data}" using 2:(\$3/(2**20)) title "Cumulative Transfer" smooth cumulative
 EOF
 
 # vim: set noexpandtab tabstop=4:

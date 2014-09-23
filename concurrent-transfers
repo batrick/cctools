@@ -32,7 +32,7 @@ set format x "%H:%M"
 set xlabel "Time (Minutes)"
 set xtics rotate by -45 offset -.8,0
 
-set ylabel "concurrent transfer jobs"
+set ylabel "Concurrent Transfer Jobs"
 set mytics
 
 first=0;

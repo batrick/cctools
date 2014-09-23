@@ -29,10 +29,10 @@ set rmargin 4
 set xdata time
 set timefmt "%s"
 set format x "%H:%M"
-set xlabel "time (Minutes)"
+set xlabel "Time (Minutes)"
 set xtics rotate by -45 offset -.8,0
 
-set ylabel "concurrent jobs"
+set ylabel "Concurrent Jobs"
 set mytics
 
 first=0;
