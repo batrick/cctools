@@ -22,8 +22,8 @@ entries=$(wc -l "$data" | cut -f1 -d' ')
 tasks="${entries}"
 
 gnuplot <<EOF
-set terminal svg
-set output 'taskspan.svg'
+set terminal postscript eps mono
+set output 'taskspan.eps'
 
 bin(x,s) = s*int(x/s)
 binc(x,s) = s*(int(x/s)+0.5)

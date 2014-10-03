@@ -19,8 +19,8 @@ EOF
 cat "$data"
 
 gnuplot <<EOF
-set terminal svg
-set output 'cumulative.svg'
+set terminal postscript eps mono
+set output 'cumulative.eps'
 
 set xdata time
 set timefmt "%s"

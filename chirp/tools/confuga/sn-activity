@@ -49,8 +49,8 @@ cat "$data"
 entries=$(wc -l "$data" | cut -f1 -d' ')
 
 gnuplot <<EOF
-set terminal svg
-set output 'sn-activity.svg'
+set terminal postscript eps mono
+set output 'sn-activity.eps'
 
 set logscale y
 set key outside

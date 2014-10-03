@@ -52,8 +52,8 @@ cat "$data"
 #tasks="${entries}"
 
 gnuplot <<EOF
-set terminal svg
-set output 'workspan.svg'
+set terminal postscript eps mono
+set output 'workspan.eps'
 
 set format x "%H:%M"
 set offset graph 0.05, 0.05, 0, 0

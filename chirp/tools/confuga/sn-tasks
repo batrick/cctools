@@ -49,8 +49,8 @@ EOF
 cat "$data"
 
 gnuplot <<EOF
-set terminal svg
-set output 'sn-tasks.svg'
+set terminal postscript eps mono
+set output 'sn-tasks.eps'
 
 set key outside
 set offset graph 0.05, 0.05

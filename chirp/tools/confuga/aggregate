@@ -21,8 +21,8 @@ EOF
 cat "$data"
 
 gnuplot <<EOF
-set terminal svg
-set output 'aggregate.svg'
+set terminal postscript eps mono
+set output 'aggregate.eps'
 
 set rmargin 4
 
