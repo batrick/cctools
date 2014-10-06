@@ -64,7 +64,7 @@ static int db_init (confuga *C)
 		"	key TEXT PRIMARY KEY,"
 		"	value TEXT NOT NULL);"
 		"INSERT INTO Confuga.Option VALUES"
-		"	('id', (PRINTF('confuga:%s', UPPER(HEX(RANDOMBLOB(10))))));"
+		"	('id', (PRINTF('confuga:%s', UPPER(HEX(RANDOMBLOB(20))))));"
 		"CREATE TABLE Confuga.File ("
 		"	id BLOB PRIMARY KEY," /* SHA1 binary hash */
 		"	links INTEGER NOT NULL DEFAULT 0," /* number of links in the NS pointing to this file (at last check) */
