@@ -55,7 +55,6 @@ set output 'sn-activity.eps'
 set logscale y
 set key outside
 set offset graph 0.05, 0.05
-set style fill pattern
 set style histogram clustered
 set style data histograms
 set title "Data Transferred, Received, and Processed"
@@ -64,9 +63,8 @@ set xtics 0,1,$((entries-1))
 set ylabel "Bytes"
 
 set size ratio 0.5
-set style fill pattern 2
 
-plot [0:] "${data}" using 2 title "Transferred", "" u 3 title "Received", "" u 4 title "Processed"
+plot [0:] "${data}" using 2 title "Transferred" fill pattern 0, "" u 3 title "Received" fill pattern 2, "" u 4 title "Processed" fill pattern 3
 EOF
 
 # vim: set noexpandtab tabstop=4:
