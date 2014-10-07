@@ -20,6 +20,7 @@ See the file COPYING for details.
 #include <assert.h>
 #include <float.h>
 #include <limits.h>
+#include <stdarg.h>
 
 #define STOPTIME (time(NULL)+5)
 
@@ -38,6 +39,15 @@ See the file COPYING for details.
  * o Turn on delayed replication; gives job scheduling a chance to choose targets.
  * o Allow for multi-core SN.
  */
+
+static void jdebug (uint64_t level, chirp_jobid_t id, const char *tag, const char *fmt, ...)
+{
+	va_list va;
+	BUFFER_STACK_PRINT(B, 4096, "job %" PRICHIRP_JOBID_T " (`%s'): %s", id, tag, fmt)
+	va_start(va, fmt);
+	vdebug(level, buffer_tostring(&B), va);
+	va_end(va);
+}
 
 CONFUGA_API int confuga_job_dbinit (confuga *C, sqlite3 *db)
 {
@@ -142,7 +152,7 @@ out:
 	return rc;
 }
 
-static int fail (confuga *C, chirp_jobid_t id, const char *error)
+static int fail (confuga *C, chirp_jobid_t id, const char *tag, const char *error)
 {
 	static const char SQL[] =
 		"BEGIN TRANSACTION;"
@@ -165,7 +175,7 @@ static int fail (confuga *C, chirp_jobid_t id, const char *error)
 	sqlite3_stmt *stmt = NULL;
 	const char *current = SQL;
 
-	debug(D_DEBUG, "job error: `%s'", error);
+	jdebug(D_DEBUG, id, tag, "fatal error: %s", error);
 
 	sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
 	sqlcatchcode(sqlite3_step(stmt), SQLITE_DONE);
@@ -196,7 +206,7 @@ out:
 }
 
 /* TODO This is all pretty evil since jobs may never get reaped. */
-static int reschedule (confuga *C, chirp_jobid_t id, int reason)
+static int reschedule (confuga *C, chirp_jobid_t id, const char *tag, int reason)
 {
 	static const char SQL[] =
 		"BEGIN TRANSACTION;"
@@ -226,7 +236,7 @@ static int reschedule (confuga *C, chirp_jobid_t id, int reason)
 	sqlite3_stmt *stmt = NULL;
 	const char *current = SQL;
 
-	debug(D_DEBUG, "job %" PRICHIRP_JOBID_T ": attempting to reschedule due to `%s'", id, strerror(reason));
+	jdebug(D_DEBUG, id, tag, "attempting to reschedule due to `%s'", strerror(reason));
 
 	sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
 	sqlcatchcode(sqlite3_step(stmt), SQLITE_DONE);
@@ -264,7 +274,7 @@ out:
 	return rc;
 }
 
-static void CATCHJOB (confuga *C, chirp_jobid_t id, int rc)
+static void CATCHJOB (confuga *C, chirp_jobid_t id, const char *tag, int rc)
 {
 	switch (rc) {
 		case 0: /* no error */
@@ -301,10 +311,10 @@ static void CATCHJOB (confuga *C, chirp_jobid_t id, int rc)
 #endif
 		case ESRCH: /* somehow the job was lost on the remote Chirp server, probably Job DB got wiped? */
 		case EIO: /* Internal Confuga error. */
-			reschedule(C, id, rc);
+			reschedule(C, id, tag, rc);
 			break;
 		default:
-			fail(C, id, strerror(rc));
+			fail(C, id, tag, strerror(rc));
 			break;
 	}
 }
@@ -333,7 +343,7 @@ out:
 	return rc;
 }
 
-static int bindinput (confuga *C, chirp_jobid_t id, const char *serv_path, const char *task_path)
+static int bindinput (confuga *C, chirp_jobid_t id, const char *tag, const char *serv_path, const char *task_path)
 {
 	static const char SQL[] =
 		"INSERT INTO ConfugaInputFile (fid, jid, task_path) VALUES (?, ?, ?);";
@@ -344,7 +354,7 @@ static int bindinput (confuga *C, chirp_jobid_t id, const char *serv_path, const
 	const char *current = SQL;
 	confuga_fid_t fid;
 
-	debug(D_DEBUG, "binding input %" PRICHIRP_JOBID_T " %s %s", id, serv_path, task_path);
+	jdebug(D_DEBUG, id, tag, "binding input `%s'=`%s'", serv_path, task_path);
 
 	rc = confuga_lookup(C, serv_path, &fid, NULL);
 	if (rc == 0) {
@@ -368,7 +378,7 @@ static int bindinput (confuga *C, chirp_jobid_t id, const char *serv_path, const
 				continue;
 			snprintf(serv_subpath, sizeof(serv_subpath), "%s/%s", serv_path, dirent->name);
 			snprintf(task_subpath, sizeof(task_subpath), "%s/%s", task_path, dirent->name);
-			CATCH(bindinput(C, id, serv_subpath, task_subpath));
+			CATCH(bindinput(C, id, tag, serv_subpath, task_subpath));
 		}
 	} else {
 		CATCH(rc);
@@ -381,7 +391,7 @@ out:
 	return rc;
 }
 
-static int bindinputs (confuga *C, chirp_jobid_t id)
+static int bindinputs (confuga *C, chirp_jobid_t id, const char *tag)
 {
 	static const char SQL[] =
 		"BEGIN TRANSACTION;"
@@ -408,7 +418,7 @@ static int bindinputs (confuga *C, chirp_jobid_t id)
 	sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
 	sqlcatch(sqlite3_bind_int64(stmt, 1, id));
 	while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
-		CATCH(bindinput(C, id, (const char *)sqlite3_column_text(stmt, 0), (const char *)sqlite3_column_text(stmt, 1)));
+		CATCH(bindinput(C, id, tag, (const char *)sqlite3_column_text(stmt, 0), (const char *)sqlite3_column_text(stmt, 1)));
 	}
 	sqlcatchcode(rc, SQLITE_DONE);
 	sqlcatch(sqlite3_finalize(stmt); stmt = NULL);
@@ -433,7 +443,7 @@ out:
 static int job_bind_inputs (confuga *C)
 {
 	static const char SQL[] =
-		"SELECT id"
+		"SELECT id, tag"
 		"	FROM ConfugaJob"
 		"	WHERE state = 'NEW'"
 		"	ORDER BY RANDOM();"; /* to ensure no starvation, bindinputs may result in a ROLLBACK that aborts this SELECT */
@@ -446,8 +456,9 @@ static int job_bind_inputs (confuga *C)
 	sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
 	while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
 		chirp_jobid_t id = sqlite3_column_int64(stmt, 0);
-		debug(D_DEBUG, "job %" PRICHIRP_JOBID_T ": binding inputs", id);
-		CATCHJOB(C, id, bindinputs(C, id));
+		const char *tag = (const char *)sqlite3_column_text(stmt, 1);
+		jdebug(D_DEBUG, id, tag, "binding inputs");
+		CATCHJOB(C, id, tag, bindinputs(C, id, tag));
 	}
 	sqlcatchcode(rc, SQLITE_DONE);
 	sqlcatch(sqlite3_finalize(stmt); stmt = NULL);
@@ -459,7 +470,7 @@ out:
 	return rc;
 }
 
-static int dispatch (confuga *C, chirp_jobid_t id)
+static int dispatch (confuga *C, chirp_jobid_t id, const char *tag)
 {
 	/* TODO Scheduling a job isn't simply acquiring a SN resource X, you also
 	 * must acquire the transfer slots of other SN that will transfer files to
@@ -515,9 +526,9 @@ static int dispatch (confuga *C, chirp_jobid_t id)
 	rc = sqlite3_step(stmt);
 	if (rc == SQLITE_ROW) {
 		sid = sqlite3_column_int64(stmt, 0);
-		debug(D_CONFUGA, "job %" PRICHIRP_JOBID_T ": scheduling on " CONFUGA_SID_DEBFMT, id, sid);
+		jdebug(D_CONFUGA, id, tag, "scheduling on " CONFUGA_SID_DEBFMT, sid);
 	} else if (rc == SQLITE_DONE) {
-		debug(D_DEBUG, "job %" PRICHIRP_JOBID_T ": could not schedule yet", id);
+		jdebug(D_DEBUG, id, tag, "could not schedule yet");
 		THROW_QUIET(EAGAIN); /* come back later */
 	} else {
 		sqlcatch(rc);
@@ -556,7 +567,7 @@ static int job_schedule_fifo (confuga *C)
 		"			FROM ConfugaJob"
 		"			WHERE ConfugaJob.state = 'SCHEDULED'"
 		"	)"
-		"SELECT ConfugaJob.id"
+		"SELECT ConfugaJob.id, ConfugaJob.tag"
 		"	FROM Job INNER JOIN ConfugaJob ON Job.id = ConfugaJob.id"
 		"	WHERE ConfugaJob.state = 'BOUND_INPUTS'"
 		"	ORDER BY Job.priority, Job.time_commit"
@@ -571,7 +582,8 @@ static int job_schedule_fifo (confuga *C)
 	sqlcatch(sqlite3_bind_int64(stmt, 1, C->scheduler_n));
 	while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
 		chirp_jobid_t id = sqlite3_column_int64(stmt, 0);
-		CATCHJOB(C, id, dispatch(C, id));
+		const char *tag = (const char *)sqlite3_column_text(stmt, 1);
+		CATCHJOB(C, id, tag, dispatch(C, id, tag));
 	}
 	sqlcatchcode(rc, SQLITE_DONE);
 	sqlcatch(sqlite3_finalize(stmt); stmt = NULL);
@@ -583,7 +595,7 @@ out:
 	return rc;
 }
 
-static int replicate_push_synchronous (confuga *C, chirp_jobid_t id, sqlite3_int64 sid)
+static int replicate_push_synchronous (confuga *C, chirp_jobid_t id, const char *tag, sqlite3_int64 sid)
 {
 	static const char SQL[] =
 		"BEGIN TRANSACTION;"
@@ -607,7 +619,7 @@ static int replicate_push_synchronous (confuga *C, chirp_jobid_t id, sqlite3_int
 	const char *current = SQL;
 	time_t start = time(0);
 
-	debug(D_DEBUG, "job %" PRICHIRP_JOBID_T ": replicating files synchronously", id);
+	jdebug(D_DEBUG, id, tag, "replicating files synchronously");
 
 	sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
 	sqlcatchcode(sqlite3_step(stmt), SQLITE_DONE);
@@ -631,7 +643,7 @@ static int replicate_push_synchronous (confuga *C, chirp_jobid_t id, sqlite3_int
 	sqlcatchcode(sqlite3_step(stmt), SQLITE_DONE);
 	sqlcatch(sqlite3_finalize(stmt); stmt = NULL);
 
-	debug(D_DEBUG, "job %" PRICHIRP_JOBID_T ": finished replicating files", id);
+	jdebug(D_DEBUG, id, tag, "finished replicating files");
 
 done_for_now:
 	sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
@@ -646,7 +658,7 @@ out:
 	return rc;
 }
 
-static int replicate_push_asynchronous (confuga *C, chirp_jobid_t id)
+static int replicate_push_asynchronous (confuga *C, chirp_jobid_t id, const char *tag)
 {
 	static const char SQL[] =
 		/* TODO transfer attempts, reschedule on threshold */
@@ -745,7 +757,7 @@ static int replicate_push_asynchronous (confuga *C, chirp_jobid_t id)
 
 	sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
 	if (finished) {
-		debug(D_DEBUG, "job %" PRICHIRP_JOBID_T ": all dependencies are replicated", id);
+		jdebug(D_DEBUG, id, tag, "all dependencies are replicated");
 		sqlcatch(sqlite3_bind_int64(stmt, 1, id));
 		sqlcatchcode(sqlite3_step(stmt), SQLITE_DONE);
 	}
@@ -762,7 +774,7 @@ static int replicate_push_asynchronous (confuga *C, chirp_jobid_t id)
 			assert(changes == 1 || changes == 0);
 
 			if (changes > 0) {
-				debug(D_DEBUG, "job %" PRICHIRP_JOBID_T ": scheduled transfer job %" PRId64, id, (int64_t)sqlite3_last_insert_rowid(db));
+				jdebug(D_DEBUG, id, tag, "scheduled transfer job %" PRId64, (int64_t)sqlite3_last_insert_rowid(db));
 			} else {
 				/* FIXME check for stagnant jobs */
 				break;
@@ -787,7 +799,7 @@ out:
 static int job_replicate (confuga *C)
 {
 	static const char SQL[] =
-		"SELECT ConfugaJob.id, ConfugaJob.sid"
+		"SELECT ConfugaJob.id, ConfugaJob.tag, ConfugaJob.sid"
 		"	FROM ConfugaJob"
 		"	WHERE state = 'SCHEDULED'"
 		"	ORDER BY time_scheduled ASC;"; /* XXX A broken job will cause this to never make progress. ---- to ensure no starvation, replicate may result in a ROLLBACK that aborts this SELECT */
@@ -800,11 +812,12 @@ static int job_replicate (confuga *C)
 	sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
 	while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
 		chirp_jobid_t id = sqlite3_column_int64(stmt, 0);
-		confuga_sid_t sid = sqlite3_column_int64(stmt, 1);
+		const char *tag = (const char *)sqlite3_column_text(stmt, 1);
+		confuga_sid_t sid = sqlite3_column_int64(stmt, 2);
 		if (C->replication == CONFUGA_REPLICATION_PUSH_SYNCHRONOUS)
-			CATCHJOB(C, id, replicate_push_synchronous(C, id, sid));
+			CATCHJOB(C, id, tag, replicate_push_synchronous(C, id, tag, sid));
 		else if (C->replication == CONFUGA_REPLICATION_PUSH_ASYNCHRONOUS)
-			CATCHJOB(C, id, replicate_push_asynchronous(C, id));
+			CATCHJOB(C, id, tag, replicate_push_asynchronous(C, id, tag));
 		else assert(0);
 	}
 	sqlcatchcode(rc, SQLITE_DONE);
@@ -817,7 +830,7 @@ out:
 	return rc;
 }
 
-static int encode (confuga *C, chirp_jobid_t id, buffer_t *B)
+static int encode (confuga *C, chirp_jobid_t id, const char *tag, buffer_t *B)
 {
 	static const char SQL[] =
 		"SELECT executable, Option.value"
@@ -923,7 +936,7 @@ out:
 	return rc;
 }
 
-static int create (confuga *C, chirp_jobid_t id, const char *hostport)
+static int create (confuga *C, chirp_jobid_t id, const char *tag, const char *hostport)
 {
 	static const char SQL[] =
 		"BEGIN TRANSACTION;"
@@ -944,13 +957,13 @@ static int create (confuga *C, chirp_jobid_t id, const char *hostport)
 	chirp_jobid_t cid;
 
 	buffer_init(&B);
-	debug(D_DEBUG, "job %" PRICHIRP_JOBID_T ": creating job", id);
+	jdebug(D_DEBUG, id, tag, "creating job on storage node");
 
 	sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
 	sqlcatchcode(sqlite3_step(stmt), SQLITE_DONE);
 	sqlcatch(sqlite3_finalize(stmt); stmt = NULL);
 
-	CATCH(encode(C, id, &B));
+	CATCH(encode(C, id, tag, &B));
 	debug(D_DEBUG, "json = `%s'", buffer_tostring(&B));
 
 	CATCHUNIX(chirp_reli_job_create(hostport, buffer_tostring(&B), &cid, STOPTIME));
@@ -977,7 +990,7 @@ out:
 static int job_create (confuga *C)
 {
 	static const char SQL[] =
-		"SELECT ConfugaJob.id, StorageNode.hostport"
+		"SELECT ConfugaJob.id, ConfugaJob.tag, StorageNode.hostport"
 		"	FROM ConfugaJob INNER JOIN Confuga.StorageNode ON ConfugaJob.sid = StorageNode.id"
 		"	WHERE state = 'REPLICATED'"
 		"	ORDER BY RANDOM()" /* to ensure no starvation, create may result in a ROLLBACK that aborts this SELECT */
@@ -992,8 +1005,9 @@ static int job_create (confuga *C)
 	sqlcatch(sqlite3_bind_int64(stmt, 1, C->concurrency));
 	while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
 		chirp_jobid_t id = sqlite3_column_int64(stmt, 0);
-		const char *hostport = (const char *)sqlite3_column_text(stmt, 1);
-		CATCHJOB(C, id, create(C, id, hostport));
+		const char *tag = (const char *)sqlite3_column_text(stmt, 1);
+		const char *hostport = (const char *)sqlite3_column_text(stmt, 2);
+		CATCHJOB(C, id, tag, create(C, id, tag, hostport));
 	}
 	sqlcatchcode(rc, SQLITE_DONE);
 	sqlcatch(sqlite3_finalize(stmt); stmt = NULL);
@@ -1005,7 +1019,7 @@ out:
 	return rc;
 }
 
-static int commit (confuga *C, chirp_jobid_t id, const char *hostport, chirp_jobid_t cid)
+static int commit (confuga *C, chirp_jobid_t id, const char *tag, const char *hostport, chirp_jobid_t cid)
 {
 	static const char SQL[] =
 		"UPDATE ConfugaJob"
@@ -1020,7 +1034,7 @@ static int commit (confuga *C, chirp_jobid_t id, const char *hostport, chirp_job
 	const char *current = SQL;
 	BUFFER_STACK_PRINT(B, 64, "[%" PRICHIRP_JOBID_T "]", cid);
 
-	debug(D_DEBUG, "job %" PRICHIRP_JOBID_T ": committing job", id);
+	jdebug(D_DEBUG, id, tag, "committing job on storage node");
 
 	CATCHUNIX(chirp_reli_job_commit(hostport, buffer_tostring(&B), STOPTIME));
 
@@ -1039,7 +1053,7 @@ out:
 static int job_commit (confuga *C)
 {
 	static const char SQL[] =
-		"SELECT ConfugaJob.id, StorageNode.hostport, ConfugaJob.cid"
+		"SELECT ConfugaJob.id, ConfugaJob.tag, StorageNode.hostport, ConfugaJob.cid"
 		"	FROM ConfugaJob INNER JOIN Confuga.StorageNode ON ConfugaJob.sid = StorageNode.id"
 		"	WHERE state = 'CREATED';";
 
@@ -1051,9 +1065,10 @@ static int job_commit (confuga *C)
 	sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
 	while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
 		chirp_jobid_t id = sqlite3_column_int64(stmt, 0);
-		const char *hostport = (const char *)sqlite3_column_text(stmt, 1);
-		chirp_jobid_t cid = sqlite3_column_int64(stmt, 2);
-		CATCHJOB(C, id, commit(C, id, hostport, cid));
+		const char *tag = (const char *)sqlite3_column_text(stmt, 1);
+		const char *hostport = (const char *)sqlite3_column_text(stmt, 2);
+		chirp_jobid_t cid = sqlite3_column_int64(stmt, 3);
+		CATCHJOB(C, id, tag, commit(C, id, tag, hostport, cid));
 	}
 	sqlcatchcode(rc, SQLITE_DONE);
 	sqlcatch(sqlite3_finalize(stmt); stmt = NULL);
@@ -1065,7 +1080,7 @@ out:
 	return rc;
 }
 
-static int wait (confuga *C, chirp_jobid_t id, const char *hostport, chirp_jobid_t cid)
+static int wait (confuga *C, chirp_jobid_t id, const char *tag, const char *hostport, chirp_jobid_t cid)
 {
 	static const char SQL[] =
 		"BEGIN TRANSACTION;"
@@ -1087,7 +1102,7 @@ static int wait (confuga *C, chirp_jobid_t id, const char *hostport, chirp_jobid
 	unsigned i;
 	json_value *J = NULL;
 
-	debug(D_DEBUG, "job %" PRICHIRP_JOBID_T ": waiting for job", id);
+	jdebug(D_DEBUG, id, tag, "waiting for job");
 
 	CATCHUNIX(chirp_reli_job_wait(hostport, cid, 0, &status, STOPTIME));
 	assert(status);
@@ -1103,7 +1118,7 @@ static int wait (confuga *C, chirp_jobid_t id, const char *hostport, chirp_jobid
 		json_value *job = J->u.array.values[i];
 		assert(jistype(job, json_object));
 		if (jsonA_getname(job, "id", json_integer)->u.integer == cid) {
-			debug(D_CONFUGA, "job %" PRICHIRP_JOBID_T " Chirp job finished", cid);
+			jdebug(D_CONFUGA, id, tag, "job finished", cid);
 
 			sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
 			sqlcatchcode(sqlite3_step(stmt), SQLITE_DONE);
@@ -1149,7 +1164,7 @@ static int wait (confuga *C, chirp_jobid_t id, const char *hostport, chirp_jobid
 										}
 									}
 
-									debug(D_DEBUG, "job %" PRICHIRP_JOBID_T ": adding ConfugaOutputFile fid = " CONFUGA_FID_PRIFMT " size = %" PRICONFUGA_OFF_T " task_path = `%s'", id, CONFUGA_FID_PRIARGS(fid), (confuga_off_t)size->u.integer, task_path->u.string.ptr);
+									jdebug(D_DEBUG, id, tag, "adding ConfugaOutputFile fid = " CONFUGA_FID_PRIFMT " size = %" PRICONFUGA_OFF_T " task_path = `%s'", CONFUGA_FID_PRIARGS(fid), (confuga_off_t)size->u.integer, task_path->u.string.ptr);
 									sqlcatch(sqlite3_reset(stmt));
 									sqlcatch(sqlite3_bind_int64(stmt, 1, id));
 									sqlcatch(sqlite3_bind_text(stmt, 2, task_path->u.string.ptr, -1, SQLITE_STATIC));
@@ -1207,7 +1222,7 @@ out:
 static int job_wait (confuga *C)
 {
 	static const char SQL[] =
-		"SELECT ConfugaJob.id, StorageNode.hostport, ConfugaJob.cid"
+		"SELECT ConfugaJob.id, ConfugaJob.tag, StorageNode.hostport, ConfugaJob.cid"
 		"	FROM ConfugaJob INNER JOIN Confuga.StorageNode ON ConfugaJob.sid = StorageNode.id"
 		"	WHERE ConfugaJob.state = 'COMMITTED'"
 		"	ORDER BY RANDOM();"; /* to ensure no starvation, wait may result in a ROLLBACK that aborts this SELECT */
@@ -1220,9 +1235,10 @@ static int job_wait (confuga *C)
 	sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
 	while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
 		chirp_jobid_t id = sqlite3_column_int64(stmt, 0);
-		const char *hostport = (const char *)sqlite3_column_text(stmt, 1);
-		chirp_jobid_t cid = sqlite3_column_int64(stmt, 2);
-		CATCHJOB(C, id, wait(C, id, hostport, cid));
+		const char *tag = (const char *)sqlite3_column_text(stmt, 1);
+		const char *hostport = (const char *)sqlite3_column_text(stmt, 2);
+		chirp_jobid_t cid = sqlite3_column_int64(stmt, 3);
+		CATCHJOB(C, id, tag, wait(C, id, tag, hostport, cid));
 	}
 	sqlcatchcode(rc, SQLITE_DONE);
 	sqlcatch(sqlite3_finalize(stmt); stmt = NULL);
@@ -1234,7 +1250,7 @@ out:
 	return rc;
 }
 
-static int reap (confuga *C, chirp_jobid_t id, const char *hostport, chirp_jobid_t cid)
+static int reap (confuga *C, chirp_jobid_t id, const char *tag, const char *hostport, chirp_jobid_t cid)
 {
 	static const char SQL[] =
 		"UPDATE ConfugaJob"
@@ -1249,7 +1265,7 @@ static int reap (confuga *C, chirp_jobid_t id, const char *hostport, chirp_jobid
 	const char *current = SQL;
 	BUFFER_STACK_PRINT(B, 64, "[%" PRICHIRP_JOBID_T "]", cid);
 
-	debug(D_DEBUG, "job %" PRICHIRP_JOBID_T ": reaping job", id);
+	jdebug(D_DEBUG, id, tag, "reaping job on storage node");
 
 	CATCHUNIX(chirp_reli_job_reap(hostport, buffer_tostring(&B), STOPTIME));
 
@@ -1268,7 +1284,7 @@ out:
 static int job_reap (confuga *C)
 {
 	static const char SQL[] =
-		"SELECT ConfugaJob.id, StorageNode.hostport, ConfugaJob.cid"
+		"SELECT ConfugaJob.id, ConfugaJob.tag, StorageNode.hostport, ConfugaJob.cid"
 		"	FROM ConfugaJob INNER JOIN Confuga.StorageNode ON ConfugaJob.sid = StorageNode.id"
 		"	WHERE state = 'WAITED';";
 
@@ -1280,9 +1296,10 @@ static int job_reap (confuga *C)
 	sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
 	while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
 		chirp_jobid_t id = sqlite3_column_int64(stmt, 0);
-		const char *hostport = (const char *)sqlite3_column_text(stmt, 1);
-		chirp_jobid_t cid = sqlite3_column_int64(stmt, 2);
-		CATCHJOB(C, id, reap(C, id, hostport, cid));
+		const char *tag = (const char *)sqlite3_column_text(stmt, 1);
+		const char *hostport = (const char *)sqlite3_column_text(stmt, 2);
+		chirp_jobid_t cid = sqlite3_column_int64(stmt, 3);
+		CATCHJOB(C, id, tag, reap(C, id, tag, hostport, cid));
 	}
 	sqlcatchcode(rc, SQLITE_DONE);
 	sqlcatch(sqlite3_finalize(stmt); stmt = NULL);
@@ -1294,7 +1311,7 @@ out:
 	return rc;
 }
 
-static int bindoutputs (confuga *C, chirp_jobid_t id)
+static int bindoutputs (confuga *C, chirp_jobid_t id, const char *tag)
 {
 	static const char SQL[] =
 		/* This is an EXLUSIVE transaction because we will update the NS. */
@@ -1339,7 +1356,7 @@ static int bindoutputs (confuga *C, chirp_jobid_t id)
 	sqlite3_stmt *stmt = NULL;
 	const char *current = SQL;
 
-	debug(D_DEBUG, "job %" PRICHIRP_JOBID_T ": binding outputs", id);
+	jdebug(D_DEBUG, id, tag, "binding outputs");
 
 	sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
 	sqlcatchcode(sqlite3_step(stmt), SQLITE_DONE);
@@ -1400,7 +1417,7 @@ out:
 static int job_complete (confuga *C)
 {
 	static const char SQL[] =
-		"SELECT ConfugaJob.id, ConfugaJobWaitResult.status, ConfugaJobWaitResult.error"
+		"SELECT ConfugaJob.id, ConfugaJob.tag, ConfugaJobWaitResult.status, ConfugaJobWaitResult.error"
 		"	FROM ConfugaJob JOIN ConfugaJobWaitResult On ConfugaJob.id = ConfugaJobWaitResult.id"
 		"	WHERE ConfugaJob.state = 'REAPED'"
 		"	ORDER BY RANDOM();"; /* to ensure no starvation, bindoutputs/reschedule/fail may result in a ROLLBACK that aborts this SELECT */
@@ -1413,15 +1430,15 @@ static int job_complete (confuga *C)
 	sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
 	while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
 		chirp_jobid_t id = sqlite3_column_int64(stmt, 0);
-		debug(D_DEBUG, "reaped %d", (int)id);
-		const char *status = (const char *)sqlite3_column_text(stmt, 1);
-		const char *error = (const char *)sqlite3_column_text(stmt, 2);
+		const char *tag = (const char *)sqlite3_column_text(stmt, 1);
+		const char *status = (const char *)sqlite3_column_text(stmt, 2);
+		const char *error = (const char *)sqlite3_column_text(stmt, 3);
 		if (strcmp(status, "FINISHED") == 0)
-			CATCHJOB(C, id, bindoutputs(C, id));
+			CATCHJOB(C, id, tag, bindoutputs(C, id, tag));
 		else if (strcmp(status, "KILLED") == 0)
-			reschedule(C, id, ECHILD); /* someone else killed it? reschedule */
+			reschedule(C, id, tag, ECHILD); /* someone else killed it? reschedule */
 		else if (strcmp(status, "ERRORED") == 0)
-			fail(C, id, error);
+			fail(C, id, tag, error);
 		else
 			assert(0);
 	}
@@ -1435,7 +1452,7 @@ out:
 	return rc;
 }
 
-static int kill (confuga *C, chirp_jobid_t id, const char *hostport, chirp_jobid_t cid)
+static int kill (confuga *C, chirp_jobid_t id, const char *tag, const char *hostport, chirp_jobid_t cid)
 {
 	static const char SQL[] =
 		"BEGIN TRANSACTION;"
@@ -1454,11 +1471,11 @@ static int kill (confuga *C, chirp_jobid_t id, const char *hostport, chirp_jobid
 	BUFFER_STACK_PRINT(B, 64, "[%" PRICHIRP_JOBID_T "]", cid);
 
 	if (hostport) {
-		debug(D_DEBUG, "job %" PRICHIRP_JOBID_T ": killing job", id);
+		jdebug(D_DEBUG, id, tag, "killing job");
 		rc = chirp_reli_job_kill(hostport, buffer_tostring(&B), STOPTIME);
 		if (rc == -1 && !(errno == EACCES /* already in a terminal state */ || errno == ESRCH /* apparently remote Chirp server database was reset */))
 			CATCH(errno);
-		debug(D_DEBUG, "job %" PRICHIRP_JOBID_T ": reaping job", id);
+		jdebug(D_DEBUG, id, tag, "reaping job");
 		rc = chirp_reli_job_reap(hostport, buffer_tostring(&B), STOPTIME);
 		if (rc == -1 && !(errno == EACCES /* already in a terminal state */ || errno == ESRCH /* apparently remote Chirp server database was reset */))
 			CATCH(errno);
@@ -1493,7 +1510,7 @@ out:
 static int job_kill (confuga *C)
 {
 	static const char SQL[] =
-		"SELECT ConfugaJob.id, StorageNode.hostport, ConfugaJob.cid"
+		"SELECT ConfugaJob.id, ConfugaJob.tag, StorageNode.hostport, ConfugaJob.cid"
 		"	FROM"
 		"		Job"
 		"		INNER JOIN ConfugaJob ON Job.id = ConfugaJob.id"
@@ -1509,9 +1526,10 @@ static int job_kill (confuga *C)
 	sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
 	while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
 		chirp_jobid_t id = sqlite3_column_int64(stmt, 0);
-		const char *hostport = (const char *)sqlite3_column_text(stmt, 1);
-		chirp_jobid_t cid = sqlite3_column_int64(stmt, 2);
-		kill(C, id, hostport, cid);
+		const char *tag = (const char *)sqlite3_column_text(stmt, 1);
+		const char *hostport = (const char *)sqlite3_column_text(stmt, 2);
+		chirp_jobid_t cid = sqlite3_column_int64(stmt, 3);
+		kill(C, id, tag, hostport, cid);
 	}
 	sqlcatchcode(rc, SQLITE_DONE);
 	sqlcatch(sqlite3_finalize(stmt); stmt = NULL);
