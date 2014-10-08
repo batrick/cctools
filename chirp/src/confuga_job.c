@@ -627,7 +627,7 @@ static int replicate_push_synchronous (confuga *C, chirp_jobid_t id, const char 
 		assert(sqlite3_column_type(stmt, 0) == SQLITE_BLOB && (size_t)sqlite3_column_bytes(stmt, 0) == sizeof(fid.id));
 		memcpy(fid.id, sqlite3_column_blob(stmt, 0), sizeof(fid.id));
 		CATCH(confugaR_replicate(C, fid, sid, (const char *)sqlite3_column_text(stmt, 1), STOPTIME));
-		if (start+2*60 <= time(0))
+		if (start+60 <= time(0))
 			goto done_for_now; /* if we replicate for more than 2 minutes, come back later to finish */
 	}
 	sqlcatchcode(rc, SQLITE_DONE);
@@ -803,6 +803,7 @@ static int job_replicate (confuga *C)
 	sqlite3 *db = C->db;
 	sqlite3_stmt *stmt = NULL;
 	const char *current = SQL;
+	time_t start = time(0);
 
 	sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
 	while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
@@ -814,6 +815,10 @@ static int job_replicate (confuga *C)
 		else if (C->replication == CONFUGA_REPLICATION_PUSH_ASYNCHRONOUS)
 			CATCHJOB(C, id, tag, replicate_push_asynchronous(C, id, tag));
 		else assert(0);
+		if (start+60 <= time(0)) {
+			rc = SQLITE_DONE;
+			break;
+		}
 	}
 	sqlcatchcode(rc, SQLITE_DONE);
 	sqlcatch(sqlite3_finalize(stmt); stmt = NULL);
