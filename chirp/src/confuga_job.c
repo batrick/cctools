@@ -258,11 +258,6 @@ static int reschedule (confuga *C, chirp_jobid_t id, const char *tag, int reason
 	sqlcatch(sqlite3_finalize(stmt); stmt = NULL);
 
 	sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
-	sqlcatch(sqlite3_bind_int64(stmt, 1, id));
-	sqlcatchcode(sqlite3_step(stmt), SQLITE_DONE);
-	sqlcatch(sqlite3_finalize(stmt); stmt = NULL);
-
-	sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
 	sqlcatchcode(sqlite3_step(stmt), SQLITE_DONE);
 	sqlcatch(sqlite3_finalize(stmt); stmt = NULL);
 
