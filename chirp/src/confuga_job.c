@@ -1118,7 +1118,7 @@ static int wait (confuga *C, chirp_jobid_t id, const char *tag, const char *host
 		json_value *job = J->u.array.values[i];
 		assert(jistype(job, json_object));
 		if (jsonA_getname(job, "id", json_integer)->u.integer == cid) {
-			jdebug(D_CONFUGA, id, tag, "job finished", cid);
+			jdebug(D_CONFUGA, id, tag, "storage node job %" PRICHIRP_JOBID_T " finished", cid);
 
 			sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
 			sqlcatchcode(sqlite3_step(stmt), SQLITE_DONE);
