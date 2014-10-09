@@ -247,7 +247,7 @@ CONFUGA_IAPI int confugaS_setup (confuga *C)
 	sqlite3_stmt *stmt = NULL;
 	const char *current = SQL;
 
-	debug(D_CONFUGA, "intializing storage nodes...");
+	debug(D_CONFUGA, "initializing storage nodes...");
 	auth_register_all(); /* TODO */
 
 	sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
