@@ -613,6 +613,7 @@ static int replicate_push_synchronous (confuga *C, chirp_jobid_t id, const char 
 	sqlite3_stmt *stmt = NULL;
 	const char *current = SQL;
 	time_t start = time(0);
+	int paused = 0;
 
 	jdebug(D_DEBUG, id, tag, "replicating files synchronously");
 
@@ -627,20 +628,24 @@ static int replicate_push_synchronous (confuga *C, chirp_jobid_t id, const char 
 		assert(sqlite3_column_type(stmt, 0) == SQLITE_BLOB && (size_t)sqlite3_column_bytes(stmt, 0) == sizeof(fid.id));
 		memcpy(fid.id, sqlite3_column_blob(stmt, 0), sizeof(fid.id));
 		CATCH(confugaR_replicate(C, fid, sid, (const char *)sqlite3_column_text(stmt, 1), STOPTIME));
-		if (start+60 <= time(0))
-			goto done_for_now; /* if we replicate for more than 2 minutes, come back later to finish */
+		if (start+60 <= time(0)) {
+			paused = 1; /* if we replicate for more than 2 minutes, come back later to finish */
+			break;
+		}
 	}
 	sqlcatchcode(rc, SQLITE_DONE);
 	sqlcatch(sqlite3_finalize(stmt); stmt = NULL);
 
 	sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
-	sqlcatch(sqlite3_bind_int64(stmt, 1, id));
-	sqlcatchcode(sqlite3_step(stmt), SQLITE_DONE);
+	if (paused) {
+		jdebug(D_DEBUG, id, tag, "exceeded one minute of replication, coming back later to finish");
+	} else {
+		sqlcatch(sqlite3_bind_int64(stmt, 1, id));
+		sqlcatchcode(sqlite3_step(stmt), SQLITE_DONE);
+		jdebug(D_DEBUG, id, tag, "finished replicating files");
+	}
 	sqlcatch(sqlite3_finalize(stmt); stmt = NULL);
 
-	jdebug(D_DEBUG, id, tag, "finished replicating files");
-
-done_for_now:
 	sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
 	sqlcatchcode(sqlite3_step(stmt), SQLITE_DONE);
 	sqlcatch(sqlite3_finalize(stmt); stmt = NULL);
