@@ -51,7 +51,7 @@ static void jdebug (uint64_t level, chirp_jobid_t id, const char *tag, const cha
 
 CONFUGA_API int confuga_job_dbinit (confuga *C, sqlite3 *db)
 {
-	static const char Initialize[] =
+	static const char SQL[] =
 		"BEGIN TRANSACTION;"
 		"CREATE TABLE ConfugaJob ("
 		"	id INTEGER PRIMARY KEY REFERENCES Job (id),"
@@ -125,7 +125,7 @@ CONFUGA_API int confuga_job_dbinit (confuga *C, sqlite3 *db)
 	char *errmsg = NULL;
 
 	debug(D_DEBUG, "initializing ConfugaJob DB");
-	rc = sqlite3_exec(db, Initialize, NULL, NULL, &errmsg); /* Ignore any errors. */
+	rc = sqlite3_exec(db, SQL, NULL, NULL, &errmsg); /* Ignore any errors. */
 	if (rc) {
 		if (!strstr(sqlite3_errmsg(db), "table ConfugaJob already exists"))
 			debug(D_DEBUG, "[%s:%d] sqlite3 error: %d `%s': %s", __FILE__, __LINE__, rc, sqlite3_errstr(rc), sqlite3_errmsg(db));
