@@ -5,51 +5,54 @@ export GNUPLOT_DEFAULT_GDFONT=inconsolata
 job=$(realpath "$1")
 confuga=$(realpath "$2")
 
-data=$(mktemp)
+data_run=$(mktemp)
+data_rec=$(mktemp)
+data_sen=$(mktemp)
 
 echo $0
-# FIXME MIN/MAX aggregator for Start/Finish
 {
-	sqlite3 -separator $'\t' | awk '$1 != prev {printf "\n"; prev = $1}; {print}' > "$data"
+	sqlite3 -separator $'\t' | awk '$1 != prev {printf "\n"; prev = $1}; {print}' > "$data_run"
 } <<EOF
 ATTACH 'file://${job}?mode=ro' as Job;
 ATTACH 'file://${confuga}?mode=ro' as Confuga;
 
-WITH RECURSIVE
-	Start AS (
-		SELECT Job.time_start
-			FROM Job.Job
-			ORDER BY Job.time_start
-			LIMIT 1
-	),
-	Finish AS (
-		SELECT Job.time_finish
-			FROM Job.Job
-			ORDER BY Job.time_finish DESC
-			LIMIT 1
-	),
-	cnt (x) AS (
-		SELECT * FROM start
-		UNION ALL
-		SELECT x+(SELECT (MAX(time_finish)-MIN(time_start))/100 FROM Job)
-		--SELECT x+1
-			FROM cnt
-			WHERE cnt.x < (SELECT * FROM Finish)
-	)
-SELECT x, StorageNode.id, COUNT(ConfugaJob.id)
+CREATE TEMPORARY TABLE IDS AS
+	SELECT DISTINCT tag FROM Confuga.TransferJob;
+
+SELECT ConfugaJob.sid, Job.Job.time_start, Job.Job.time_finish, Job.Job.tag, IDS.rowid
 	FROM
-		cnt
-		--CROSS JOIN (Confuga.StorageNode LEFT OUTER JOIN (Job.ConfugaJob JOIN Job.Job ON ConfugaJob.id = Job.id) ON StorageNode.id = ConfugaJob.sid)
-		CROSS JOIN Confuga.StorageNode
-		--CROSS JOIN (Job.ConfugaJob JOIN Job.Job ON ConfugaJob.id = Job.id)
-		--LEFT OUTER JOIN (Job.ConfugaJob JOIN Job.Job ON ConfugaJob.id = Job.id) ON ConfugaJob.sid = StorageNode.id
-		LEFT OUTER JOIN (Job.ConfugaJob JOIN Job.Job ON ConfugaJob.id = Job.id) ON ConfugaJob.sid = StorageNode.id AND Job.time_start <= x AND x <= Job.time_finish
-	--WHERE Job.time_start <= x AND x <= Job.time_finish
-	GROUP BY x, StorageNode.id;
+		Job.Job
+		JOIN Job.ConfugaJob ON Job.ConfugaJob.id = Job.id
+		JOIN IDS ON Job.Job.tag = IDS.tag;
 EOF
-cat "$data"
-#entries=$(wc -l "$data" | cut -f1 -d' ')
-#tasks="${entries}"
+
+{
+	sqlite3 -separator $'\t' | awk '$1 != prev {printf "\n"; prev = $1}; {print}' > "$data_rec"
+} <<EOF
+ATTACH 'file://${confuga}?mode=ro' as Confuga;
+
+CREATE TEMPORARY TABLE IDS AS
+	SELECT DISTINCT tag FROM Confuga.TransferJob;
+
+SELECT TransferJob.tsid, TransferJob.time_new, TransferJob.time_complete, Confuga.TransferJob.tag, IDS.rowid
+	FROM
+		Confuga.TransferJob 
+		JOIN IDS ON Confuga.TransferJob.tag = IDS.tag;
+EOF
+
+{
+	sqlite3 -separator $'\t' | awk '$1 != prev {printf "\n"; prev = $1}; {print}' > "$data_sen"
+} <<EOF
+ATTACH 'file://${confuga}?mode=ro' as Confuga;
+
+CREATE TEMPORARY TABLE IDS AS
+	SELECT DISTINCT tag FROM Confuga.TransferJob;
+
+SELECT TransferJob.fsid, TransferJob.time_new, TransferJob.time_complete, Confuga.TransferJob.tag, IDS.rowid
+	FROM
+		Confuga.TransferJob 
+		JOIN IDS ON Confuga.TransferJob.tag = IDS.tag;
+EOF
 
 gnuplot <<EOF
 set terminal postscript eps mono
@@ -57,22 +60,36 @@ set output 'workspan.eps'
 
 set format x "%H:%M"
 set offset graph 0.05, 0.05, 0, 0
-set palette defined (0 "white", 1 "black")
+set style arrow 1 head filled size screen 0.025,30,45 ls 1
+set style line 1 lt 1 lw 8 lc palette z
+set style arrow 2 nohead ls 1
+set style arrow 3 head ls 1
+set style arrow 4 backhead ls 1
+set style arrow 5 heads ls 1
+set style line 2 lt 1 lw 12 lc palette z
+set style arrow 6 nohead ls 2
+set palette defined ( 1 "red", 2 "green", 3 "blue", 4 "black")
 set timefmt "%s"
 set title "Job Heat-Map"
 set xdata time
-set xlabel "Time (Minutes)"
+set xlabel "Time (HH:MM)"
 set xrange ["00:00":]
 set xtics rotate by -45
 set ylabel "Storage Node"
 set ytics 1,1
+set yrange [0:20]
 unset colorbox
 
 first=0;
 offset=0;
 func(x)=(offset=(first==0)?x:offset,first=1,x-offset)
 
-plot "$data" u (func(\$1)):2:(ceil(\$3)) with image notitle
+plot "$data_run" u (func(\$2)):(\$1+.2):(func(\$3)-func(\$2)):(0):5 with vectors arrowstyle 2 notitle, \\
+ "$data_sen" u (func(\$2)):(\$1+.5):(func(\$3)-func(\$2)):(0):5 with vectors arrowstyle 2 notitle, \\
+ "$data_rec" u (func(\$2)):(\$1+.825):(func(\$3)-func(\$2)):(0):5 with vectors arrowstyle 2 notitle, \\
+ "$data_run" u (func(\$3)):(\$1+.2):(3):(0):(4) with vectors arrowstyle 6 notitle, \\
+ "$data_run" u (func(\$2)):(\$1+.2):(3):(0):(4) with vectors arrowstyle 6 notitle, \\
+ for [i=1:20] i notitle ls 3 
 EOF
 
 # vim: set noexpandtab tabstop=4:
