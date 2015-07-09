@@ -21,6 +21,7 @@ EOF
 N=$(cat "$T")
 rm "$T"
 
+# FIXME Why do we need this awk script??
 {
 	sqlite3 -separator $'\t' | awk '$1 != prev {printf "\n"; prev = $1}; {print}' > "$data_run"
 } <<EOF
@@ -28,7 +29,7 @@ ATTACH 'file://${job}?mode=ro' as Job;
 ATTACH 'file://${confuga}?mode=ro' as Confuga;
 
 CREATE TEMPORARY TABLE IDS AS
-	SELECT DISTINCT tag FROM Confuga.TransferJob;
+	SELECT DISTINCT tag FROM ConfugaJob ORDER BY tag;
 
 SELECT ConfugaJob.sid, ConfugaJob.time_committed, ConfugaJob.time_reaped, ConfugaJob.tag, IDS.rowid
 	FROM
@@ -40,10 +41,11 @@ EOF
 {
 	sqlite3 -separator $'\t' | awk '$1 != prev {printf "\n"; prev = $1}; {print}' > "$data_rec"
 } <<EOF
+ATTACH 'file://${job}?mode=ro' as Job;
 ATTACH 'file://${confuga}?mode=ro' as Confuga;
 
 CREATE TEMPORARY TABLE IDS AS
-	SELECT DISTINCT tag FROM Confuga.TransferJob;
+	SELECT DISTINCT tag FROM ConfugaJob ORDER BY tag;
 
 SELECT TransferJob.tsid, TransferJob.time_new, TransferJob.time_complete, Confuga.TransferJob.tag, IDS.rowid
 	FROM
@@ -54,10 +56,11 @@ EOF
 {
 	sqlite3 -separator $'\t' | awk '$1 != prev {printf "\n"; prev = $1}; {print}' > "$data_sen"
 } <<EOF
+ATTACH 'file://${job}?mode=ro' as Job;
 ATTACH 'file://${confuga}?mode=ro' as Confuga;
 
 CREATE TEMPORARY TABLE IDS AS
-	SELECT DISTINCT tag FROM Confuga.TransferJob;
+	SELECT DISTINCT tag FROM ConfugaJob ORDER BY tag;
 
 SELECT TransferJob.fsid, TransferJob.time_new, TransferJob.time_complete, Confuga.TransferJob.tag, IDS.rowid
 	FROM
@@ -74,9 +77,9 @@ stats "$data_sen" using 2 prefix "sen" nooutput
 stats "$data_rec" using 2 prefix "rec" nooutput
 
 set palette defined (1 "gray30", 2 "gray70", 3 "gray50")
-set style line 1 lt 1 lw 16 lc palette z
-set style line 2 lt 1 lw 04 lc rgb "black"
-set style line 3 lt 1 lw 01 lc rgb "white"
+set style line 1 lt 1 lw 6 lc palette z
+set style line 2 lt 1 lw 4 lc rgb "black"
+set style line 3 lt 1 lw 1 lc rgb "white"
 set style arrow 1 nohead ls 1
 set style arrow 2 nohead ls 2
 
@@ -98,6 +101,8 @@ max(a,b) = a > b ? a : b
 
 tmin = min(run_min, min(sen_min, rec_min))
 
+# Use 2D vectors to indicate activity in time. The 5th column is used for styling the vector according to the workflow source of the activity.
+# <tstart, sid, max((tfinish-tstart), 30), 0, workflow_tag>
 plot  "$data_run" u (\$2-tmin):(\$1+.30):(max(\$3-\$2, 30)):(0):5 with vectors arrowstyle 1 notitle \\
 	 ,"$data_sen" u (\$2-tmin):(\$1+.75):(max(\$3-\$2, 30)):(0):5 with vectors arrowstyle 1 notitle \\
 	 ,"$data_rec" u (\$2-tmin):(\$1+.75):(max(\$3-\$2, 30)):(0):5 with vectors arrowstyle 1 notitle \\
