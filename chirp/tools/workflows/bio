@@ -1,0 +1,28 @@
+#!/bin/bash
+
+set -e
+
+function run {
+	printf '%s\n' "$*"
+	time "$@"
+}
+
+WORKFLOW=./bio-workflow
+WORKSPACE="/users/$(whoami)/${WORKFLOW}"
+HOST=disc01.crc.nd.edu:9194
+SCRIPT="$(realpath "$(dirname "$0")/bio.py")"
+
+if ! [ -r "$WORKFLOW/Makeflow" ]; then
+	mkdir -p "$WORKFLOW"
+	(cd "$WORKFLOW" && weaver -N "$SCRIPT")
+fi
+
+run chirp -d all --auth=unix --debug=chirp --timeout=60m "$HOST" rm "$WORKSPACE" || true
+run chirp -d all --auth=unix --debug=chirp --timeout=60m "$HOST" put "$WORKFLOW" "$WORKSPACE"
+parrot_run --debug=chirp --chirp-auth=unix --timeout=60m -- /bin/bash <<EOF
+ln /chirp/$HOST/group/ccl/Mosquito.FilteredPacBioSubreads.58Cells.130905.fastq /chirp/$HOST/$WORKSPACE
+ln /chirp/$HOST/group/ccl/Anopheles-gambiae-S-Pimperena_CONTIGS_AgamS1.fa /chirp/$HOST/$WORKSPACE
+EOF
+run makeflow -d all --batch-type=chirp --debug=all --debug-file="makeflow.debug" --debug-rotate-max=0 --working-dir="chirp://$HOST/$WORKSPACE" --wrapper=$'{\n {}\n} > stdout.%% 2> stderr.%%' --wrapper-output='stdout.%%' --wrapper-output='stderr.%%' "$WORKFLOW/Makeflow"
+
+# vim: set noexpandtab tabstop=4:
