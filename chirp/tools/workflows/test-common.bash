@@ -46,7 +46,7 @@ function testrun {
 	run "$CHIRP" --auth=unix --debug=chirp --debug-file="${base}/chirp.debug" --timeout=60m localhost:"$PORT" put "${workflow}/" "${namespace}"
 
 	run cp "${workflow}/Makeflow" "${base}/Makeflow"
-	run "$MAKEFLOW" --batch-type=chirp --debug=all --debug-file="${base}/makeflow.debug" --debug-rotate-max=0 --working-dir="chirp://localhost:${PORT}/" --wrapper=$'{\n {}\n} > stdout.%% 2> stderr.%%' --wrapper-output="${namespace}/stdout.%%" --wrapper-output="${namespace}/stderr.%%" "${base}/Makeflow"
+	run "$MAKEFLOW" --batch-type=chirp --debug=all --debug-file="${base}/makeflow.debug" --debug-rotate-max=0 --working-dir="chirp://localhost:${PORT}/${namespace}" --wrapper=$'{\n {}\n} > stdout.%% 2> stderr.%%' --wrapper-output="${namespace}/stdout.%%" --wrapper-output="${namespace}/stderr.%%" "${base}/Makeflow"
 
 	run "$PARROT" --chirp-auth=unix --timeout=60m -- cp -r "/chirp/localhost:${PORT}/.confuga/" "${base}/confuga-proc/" || true
 
