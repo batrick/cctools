@@ -1,0 +1,21 @@
+#!/bin/bash
+
+source "$(dirname "$0")"/test-common.bash
+
+DIR="workflow"
+MAKEFLOW_FILE="$DIR"/Makeflow
+
+if ! [ -d "$DIR" ]; then
+	weaver -N -O "$DIR" "$(dirname "$0")/bio.py"
+fi
+
+# do 20 and 30 first to get an early look at start/end
+for pull in 0 $(for exp in 28 30 40; do printf '%d\t' $((1+1*2**exp)); done); do
+	for scheduler in fifo-0; do
+		for replication in push-async-1; do
+			testrun "$DIR" "$(pwd)/test.$(printf '%016x' "${pull}").${scheduler}.${replication}" "scheduler=${scheduler}&replication=${replication}&pull-threshold=${pull}"
+		done
+	done
+done
+
+# vim: set noexpandtab tabstop=4:
