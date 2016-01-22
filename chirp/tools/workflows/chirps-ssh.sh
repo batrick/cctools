@@ -10,7 +10,7 @@ CHIRP_TRAN="/disk/d11/${USERNAME}/confuga.node.tran"
 CONFUGA_ROOT="/users/${USERNAME}/.confuga/"
 
 if [ "$(whoami)" = pdonnel3 ]; then
-	PORT=9122
+	PORT=9155
 elif [ "$(whoami)" = nhazekam ]; then
 	PORT=9222
 else
