@@ -1,0 +1,20 @@
+#!/bin/bash
+
+source "$(dirname "$0")"/test-common.bash
+
+ARCHIVE=/afs/crc.nd.edu/group/ccl/data/workflows/archives/bwa.tar.gz
+DIR="$(pwd)/bwa_workflow"
+
+if ! [ -d "$DIR/" ]; then
+	run tar xzf "$ARCHIVE"
+fi
+
+for pull in 0 $(for exp in 28 40; do printf '%d\t' $((1+1*2**exp)); done); do
+	for scheduler in fifo-0; do
+		for replication in push-async-1; do
+			testrun "$DIR" "$(pwd)/test.$(printf '%016x' "${pull}").${scheduler}.${replication}" "scheduler=${scheduler}&replication=${replication}&pull-threshold=${pull}"
+		done
+	done
+done
+
+# vim: set noexpandtab tabstop=4:
